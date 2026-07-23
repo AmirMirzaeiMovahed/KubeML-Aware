@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "k8s-ai-scheduler"
+version = "0.1.0"
+description = "Reproducible ML-aware Kubernetes scheduling experiments"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "jsonschema==4.26.0",
+  "kubernetes==36.0.2",
+  "matplotlib==3.11.0",
+  "numpy==2.3.5",
+  "pandas==3.0.3",
+  "prometheus-client==0.25.0",
+  "PyYAML==6.0.3",
+]
+
+[project.scripts]
+ml-scheduler = "scheduler.custom_scheduler:main"
+ml-gate-controller = "scheduler.gate_controller:main"
+ml-workload = "workload.generate_workload:main"
+ml-run-cluster = "experiments.run_cluster:main"
+ml-analyze = "experiments.analyze:main"
+ml-collect = "results.metrics_collector:main"
+ml-validate-manifests = "scripts.validate_manifests:main"
+
+[project.optional-dependencies]
+test = [
+  "kubernetes-validate==1.36.0",
+  "pytest==9.1.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scheduler*", "workload*", "results*", "sim*", "experiments*", "k8s*", "scripts*"]
+
+[tool.setuptools.package-data]
+experiments = ["scenarios.yaml", "locks/*.json"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+markers = [
+  "integration: requires a reachable Kubernetes API or a test API server",
+  "e2e: requires a disposable Kubernetes cluster",
+]

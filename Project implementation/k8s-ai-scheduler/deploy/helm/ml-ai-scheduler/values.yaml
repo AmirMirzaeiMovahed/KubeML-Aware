@@ -1,0 +1,140 @@
+# mode is either "production" (scheduling-gate controller) or "reproduction"
+# (single-node manual-binding implementation matching the article).
+mode: production
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ml-aware-scheduler
+  tag: "0.1.0"
+  # Prefer an immutable sha256 digest on a shared/production cluster.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+scheduler:
+  name: default-scheduler
+  gateName: ml.scheduler/release
+  logLevel: INFO
+  pacingMode: none
+  fixedDelaySeconds: 0
+  cpuThreshold: 0.85
+  # Must exceed the observed Metrics API sample cadence with margin. The
+  # matrix runner measures timestamp advancement before adaptive execution.
+  maxWaitSeconds: 90
+  metricsMaxAgeSeconds: 30
+  adaptiveHysteresis: 0.05
+  expectedCount: 0
+  quietPeriodSeconds: 1.5
+  burstTimeoutSeconds: 60
+  executionTimeoutSeconds: 120
+  apiTimeoutSeconds: 10
+  apiRetries: 4
+  targetNode: ""
+  reverse: false
+  resultsPath: "/results/schedule-{run_id}.json"
+  extraArgs: []
+
+experiment:
+  runId: ""
+  scenario: ""
+  config: ""
+  repetition: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+  # Enables cluster-scoped read access to nodes.metrics.k8s.io independently
+  # from the fallback pacing mode. Required by dynamic 90-run matrix Pods.
+  nodeMetricsRead: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+health:
+  port: 8080
+  startup:
+    periodSeconds: 2
+    timeoutSeconds: 2
+    failureThreshold: 30
+  liveness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 2
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+terminationGracePeriodSeconds: 30
+
+persistence:
+  # Results use bounded emptyDir by default. Enable a dynamically provisioned
+  # PVC or set existingClaim when records must survive Pod replacement.
+  enabled: false
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+networkPolicy:
+  enabled: true
+  # Health and metrics are reachable from Pods in this namespace. Add
+  # monitoring namespace labels below when a cross-namespace scraper is used.
+  additionalIngressNamespaceSelectors: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    additionalLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

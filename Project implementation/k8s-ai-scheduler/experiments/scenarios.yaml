@@ -1,0 +1,130 @@
+schema_version: "1.0"
+kind: ml-scheduler-experiment-plan
+description: >-
+  Exact pre-registered paper reproduction matrix. The base plan contains
+  70 clean Kubernetes runs: 25 pacing runs and 45 main-comparison runs.
+  Enabling the adaptive extension adds 20 separately identified runs, for 90.
+
+execution_order:
+  strategy: deterministic-randomized-blocks
+  seed: 20250711
+  description: >-
+    Scenario/repetition blocks are shuffled once with this registered seed,
+    then configurations are shuffled inside each block. Paired workloads stay
+    adjacent while temporal drift is not confounded with scheduler order.
+
+seed_policy:
+  pacing_base: 1000
+  main_base: 2000
+  note: >-
+    Every configuration within one scenario/repetition reuses the identical
+    seed and therefore the identical deterministic workload. Different
+    repetitions and scenarios use distinct seeds.
+
+profiles:
+  article_exact:
+    groups:
+      - name: pacing
+        scenario: 48-half-pacing
+        jobs: 48
+        load: half
+        repetitions: 5
+        seed_base: 1000
+        configurations:
+          - name: default
+            scheduler_name: default-scheduler
+            manifest_set: default
+            pacing_mode: none
+            fixed_delay_seconds: 0
+            reverse: false
+          - name: custom-baseline
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: none
+            fixed_delay_seconds: 0
+            reverse: false
+          - name: custom-delay-1s
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: fixed
+            fixed_delay_seconds: 1
+            reverse: false
+          - name: custom-delay-2s
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: fixed
+            fixed_delay_seconds: 2
+            reverse: false
+          - name: custom-delay-5s
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: fixed
+            fixed_delay_seconds: 5
+            reverse: false
+
+      - name: main
+        repetitions: 5
+        seed_base: 2000
+        scenarios:
+          - name: 12-normal
+            jobs: 12
+            load: normal
+            seed_offset: 0
+          - name: 48-normal
+            jobs: 48
+            load: normal
+            seed_offset: 100
+          - name: 48-half
+            jobs: 48
+            load: half
+            seed_offset: 200
+        configurations:
+          - name: default
+            scheduler_name: default-scheduler
+            manifest_set: default
+            pacing_mode: none
+            fixed_delay_seconds: 0
+            reverse: false
+          - name: custom-baseline
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: none
+            fixed_delay_seconds: 0
+            reverse: false
+          - name: reversed
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: none
+            fixed_delay_seconds: 0
+            reverse: true
+
+  adaptive_extension:
+    groups:
+      - target_group: pacing
+        configurations:
+          - name: custom-adaptive
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: adaptive
+            fixed_delay_seconds: 0
+            reverse: false
+      - target_group: main
+        configurations:
+          - name: custom-adaptive
+            scheduler_name: ml-aware-scheduler
+            manifest_set: custom
+            pacing_mode: adaptive
+            fixed_delay_seconds: 0
+            reverse: false
+
+load_profiles:
+  normal:
+    feature_scales: {}
+    description: Sampled features are unchanged.
+  half:
+    feature_scales:
+      M: 0.5
+    description: >-
+      Article half-load profile: only matrix dimension M is halved; T, R, G,
+      C, and P remain unchanged. This assumption is embedded in every workload
+      document to prevent the previous undocumented T-and-M scaling.

@@ -1,0 +1,8 @@
+-c constraints.txt
+jsonschema==4.26.0
+kubernetes==36.0.2
+matplotlib==3.11.0
+numpy==2.3.5
+pandas==3.0.3
+prometheus-client==0.25.0
+PyYAML==6.0.3

@@ -1,0 +1,3 @@
+-r requirements.txt
+kubernetes-validate==1.36.0
+pytest==9.1.1

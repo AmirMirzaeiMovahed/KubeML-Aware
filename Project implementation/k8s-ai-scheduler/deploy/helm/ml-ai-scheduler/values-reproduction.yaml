@@ -1,0 +1,29 @@
+mode: reproduction
+replicaCount: 1
+
+image:
+  repository: ml-aware-scheduler
+  tag: "0.1.0"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+scheduler:
+  name: ml-aware-scheduler
+  pacingMode: none
+  expectedCount: 48
+  quietPeriodSeconds: 1.5
+  burstTimeoutSeconds: 60
+  executionTimeoutSeconds: 120
+  resultsPath: "/results/schedule-{run_id}.json"
+  # Required at deployment time: --set-string scheduler.targetNode=<node>.
+  targetNode: ""
+  reverse: false
+
+experiment:
+  runId: run-48-half-custom-baseline-r1
+  scenario: 48-half
+  config: custom-baseline
+  repetition: "1"
+
+podDisruptionBudget:
+  enabled: false

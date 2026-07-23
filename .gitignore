@@ -1,0 +1,28 @@
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+kubeconfig
+.kube/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*

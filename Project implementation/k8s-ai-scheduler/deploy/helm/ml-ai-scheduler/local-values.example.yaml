@@ -1,0 +1,16 @@
+# Copy to repository-root values.local.yaml (ignored by Git), then change only
+# references to objects that already exist in the target cluster. Never put
+# registry credentials or Secret data in this file.
+imagePullSecrets:
+  - name: registry-credentials
+
+# The matrix runner archives every scheduler record before workload cleanup.
+# Enable persistence only after confirming a default StorageClass, or set an
+# existing reviewed claim name.
+persistence:
+  enabled: false
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi

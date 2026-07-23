@@ -1,0 +1,26 @@
+mode: production
+replicaCount: 1
+
+image:
+  repository: ml-aware-scheduler
+  tag: "0.1.0"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+scheduler:
+  # Workloads stay on default-scheduler. The controller only removes the
+  # ml.scheduler/release scheduling gate in ranked/paced order.
+  name: default-scheduler
+  gateName: ml.scheduler/release
+  pacingMode: none
+  expectedCount: 0
+  resultsPath: "/results/gate-{run_id}.json"
+
+experiment:
+  runId: ""
+  scenario: ""
+  config: production-gated
+  repetition: ""
+
+podDisruptionBudget:
+  enabled: false

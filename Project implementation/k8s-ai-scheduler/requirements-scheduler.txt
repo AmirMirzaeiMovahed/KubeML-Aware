@@ -1,0 +1,4 @@
+-c constraints.txt
+kubernetes==36.0.2
+prometheus-client==0.25.0
+PyYAML==6.0.3

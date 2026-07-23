@@ -1,0 +1,187 @@
+{{- include "ml-ai-scheduler.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ml-ai-scheduler.fullname" . }}
+  labels:
+    {{- include "ml-ai-scheduler.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Until leader election exists, never overlap two active controllers.
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      {{- include "ml-ai-scheduler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "ml-ai-scheduler.selectorLabels" . | nindent 8 }}
+        {{- if .Values.experiment.runId }}
+        ml.scheduler/run-id: {{ .Values.experiment.runId | quote }}
+        {{- end }}
+        {{- if .Values.experiment.scenario }}
+        ml.scheduler/scenario: {{ .Values.experiment.scenario | quote }}
+        {{- end }}
+        {{- if .Values.experiment.config }}
+        ml.scheduler/config: {{ .Values.experiment.config | quote }}
+        {{- end }}
+        {{- if .Values.experiment.repetition }}
+        ml.scheduler/repetition: {{ .Values.experiment.repetition | quote }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ml-ai-scheduler.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: scheduler
+          image: {{ include "ml-ai-scheduler.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python"]
+          args:
+            - "-m"
+            {{- if eq .Values.mode "reproduction" }}
+            - "scheduler.custom_scheduler"
+            {{- else }}
+            - "scheduler.gate_controller"
+            {{- end }}
+            - "--scheduler-name"
+            - {{ .Values.scheduler.name | quote }}
+            - "--namespace"
+            - {{ .Release.Namespace | quote }}
+            - "--pacing-mode"
+            - {{ .Values.scheduler.pacingMode | quote }}
+            - "--fixed-delay"
+            - {{ .Values.scheduler.fixedDelaySeconds | quote }}
+            - "--cpu-threshold"
+            - {{ .Values.scheduler.cpuThreshold | quote }}
+            - "--max-wait"
+            - {{ .Values.scheduler.maxWaitSeconds | quote }}
+            - "--metrics-max-age"
+            - {{ .Values.scheduler.metricsMaxAgeSeconds | quote }}
+            - "--adaptive-hysteresis"
+            - {{ .Values.scheduler.adaptiveHysteresis | quote }}
+            - "--quiet-period"
+            - {{ .Values.scheduler.quietPeriodSeconds | quote }}
+            - "--burst-timeout"
+            - {{ .Values.scheduler.burstTimeoutSeconds | quote }}
+            - "--api-timeout"
+            - {{ .Values.scheduler.apiTimeoutSeconds | quote }}
+            - "--api-retries"
+            - {{ .Values.scheduler.apiRetries | quote }}
+            - "--health-host"
+            - "0.0.0.0"
+            - "--health-port"
+            - {{ .Values.health.port | quote }}
+            - "--results"
+            - {{ .Values.scheduler.resultsPath | quote }}
+            {{- if .Values.experiment.runId }}
+            - "--run-id"
+            - {{ .Values.experiment.runId | quote }}
+            {{- end }}
+            {{- if gt (int .Values.scheduler.expectedCount) 0 }}
+            - "--expected-count"
+            - {{ .Values.scheduler.expectedCount | quote }}
+            {{- end }}
+            {{- if eq .Values.mode "reproduction" }}
+            - "--execution-timeout"
+            - {{ .Values.scheduler.executionTimeoutSeconds | quote }}
+            {{- if .Values.scheduler.targetNode }}
+            - "--target-node"
+            - {{ .Values.scheduler.targetNode | quote }}
+            {{- end }}
+            {{- if .Values.scheduler.reverse }}
+            - "--reverse"
+            {{- end }}
+            {{- else }}
+            - "--gate-name"
+            - {{ .Values.scheduler.gateName | quote }}
+            {{- end }}
+            {{- with .Values.scheduler.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "ml-ai-scheduler.fullname" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.health.port }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: {{ .Values.health.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.health.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.health.startup.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: {{ .Values.health.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.health.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.health.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.health.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: {{ .Values.health.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.health.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.health.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.health.readiness.failureThreshold }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: results
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (include "ml-ai-scheduler.fullname" .) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir:
+            sizeLimit: 256Mi
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

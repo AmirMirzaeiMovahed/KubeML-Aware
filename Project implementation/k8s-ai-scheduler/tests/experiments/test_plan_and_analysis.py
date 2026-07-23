@@ -1,0 +1,397 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from experiments.analyze import _mean_ci95, analyze
+from experiments.run_cluster import (
+    DEFAULT_PLAN,
+    ClusterRunError,
+    RunSpec,
+    _canonical_sha256,
+    _write_or_validate_plan_lock,
+    expand_plan,
+    materialize_run,
+    plan_document,
+    probe_scheduler_run,
+    validate_result_for_spec,
+    validate_scheduler_record,
+)
+from experiments.schema import make_result_document
+
+
+def test_registered_plan_has_exact_70_and_optional_90_runs():
+    base = expand_plan(DEFAULT_PLAN, include_adaptive=False)
+    extended = expand_plan(DEFAULT_PLAN, include_adaptive=True)
+    assert len(base) == 70
+    assert len(extended) == 90
+    assert len({run.run_id for run in extended}) == 90
+    assert sum(run.group == "pacing" for run in base) == 25
+    assert sum(run.group == "main" for run in base) == 45
+
+
+def test_paired_configs_materialize_identical_workload_features(tmp_path: Path):
+    specs = expand_plan(DEFAULT_PLAN)
+    default = next(run for run in specs if run.group == "pacing" and run.repetition == 0 and run.config == "default")
+    custom = next(run for run in specs if run.group == "pacing" and run.repetition == 0 and run.config == "custom-baseline")
+    assert (default.scenario, default.repetition, default.seed) == (
+        custom.scenario, custom.repetition, custom.seed,
+    )
+    materialize_run(
+        default,
+        work_root=tmp_path,
+        image="ml-sim:v1",
+        namespace="experiment",
+        overwrite=False,
+    )
+    materialize_run(
+        custom,
+        work_root=tmp_path,
+        image="ml-sim:v1",
+        namespace="experiment",
+        overwrite=False,
+    )
+    import json
+    first = json.loads((tmp_path / default.run_id / "jobs.json").read_text(encoding="utf-8"))
+    second = json.loads((tmp_path / custom.run_id / "jobs.json").read_text(encoding="utf-8"))
+    assert first["jobs"] == second["jobs"]
+
+
+def test_reviewed_materialization_is_reused_only_when_exact(tmp_path: Path):
+    spec = next(run for run in expand_plan(DEFAULT_PLAN) if run.jobs == 12)
+    first = materialize_run(
+        spec,
+        work_root=tmp_path,
+        image="registry.example/ml-sim@sha256:" + "a" * 64,
+        namespace="experiment",
+        overwrite=False,
+        image_pull_secrets=["registry-credentials"],
+    )
+    second = materialize_run(
+        spec,
+        work_root=tmp_path,
+        image="registry.example/ml-sim@sha256:" + "a" * 64,
+        namespace="experiment",
+        overwrite=False,
+        image_pull_secrets=["registry-credentials"],
+    )
+    assert second == first
+    manifest = next(first.glob("*.yaml"))
+    payload = manifest.read_text(encoding="utf-8").replace(
+        "ml.scheduler/config:", "ml.scheduler/tampered-config:", 1
+    )
+    manifest.write_text(payload, encoding="utf-8")
+    with pytest.raises(ClusterRunError, match="drifted"):
+        materialize_run(
+            spec,
+            work_root=tmp_path,
+            image="registry.example/ml-sim@sha256:" + "a" * 64,
+            namespace="experiment",
+            overwrite=False,
+            image_pull_secrets=["registry-credentials"],
+        )
+
+
+def test_plan_lock_cannot_be_silently_replaced(tmp_path: Path):
+    specs = expand_plan(DEFAULT_PLAN)
+    document = plan_document(specs, include_adaptive=False)
+    path = tmp_path / "plan.json"
+    _write_or_validate_plan_lock(path, document, require_existing=False)
+    _write_or_validate_plan_lock(path, document, require_existing=True)
+    changed = {**document, "run_count": 999}
+    with pytest.raises(ClusterRunError, match="plan lock differs"):
+        _write_or_validate_plan_lock(path, changed, require_existing=True)
+
+
+def test_confidence_interval_collapses_for_one_value():
+    assert _mean_ci95([3.0]) == (3.0, 3.0, 3.0)
+
+
+def test_confidence_interval_surrounds_mean():
+    mean, lower, upper = _mean_ci95([1, 2, 3, 4, 5])
+    assert mean == 3.0
+    assert lower < mean < upper
+
+
+def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    specs = expand_plan(DEFAULT_PLAN)
+    plan_hash = plan_document(specs, include_adaptive=False)["plan_sha256"]
+    for spec in specs:
+        jobs = []
+        for index in range(spec.jobs):
+            start = index * 0.01
+            end = start + 1.0
+            jobs.append({
+                "job_id": f"job-{index}",
+                "category": "test",
+                "features": {"T": 1, "R": 1, "M": 1, "G": 1, "C": 1, "P": 1},
+                "rank": 0.625,
+                "submission_time": 0.0,
+                "execution_start_time": start,
+                "completion_time": end,
+                "jct_s": end,
+                "status": "completed",
+                "node_name": "node-a",
+                "error": None,
+            })
+        document = make_result_document(
+            run_id=spec.run_id,
+            scenario=spec.scenario,
+            config=spec.config,
+            repetition=spec.repetition,
+            seed=spec.seed,
+            expected_jobs=spec.jobs,
+            jobs=jobs,
+            source="kubernetes",
+            environment={
+                "orchestration": {
+                    "plan_sha256": plan_hash,
+                    "target_node": "node-a",
+                    "trainer_image": "registry.example/ml-sim@sha256:" + "a" * 64,
+                    "kubectl_context": "test-context",
+                    "scheduler_deployment": "scheduler",
+                    "artifact_sha256": {
+                        "jobs.json": "b" * 64,
+                        **{
+                            f"pods/{job['job_id']}.yaml": "c" * 64
+                            for job in jobs
+                        },
+                    },
+                    "cluster_snapshot_sha256": _canonical_sha256(
+                        {
+                            "target_node": {"name": "node-a"},
+                            "kubernetes_version": {},
+                            "helm": {"version": "test"},
+                        }
+                    ),
+                },
+                "cluster_snapshot": {
+                    "target_node": {"name": "node-a"},
+                    "kubernetes_version": {},
+                    "helm": {"version": "test"},
+                },
+                "kubernetes": {
+                    "workload_pods": [
+                        {"name": job["job_id"], "node_name": "node-a"}
+                        for job in jobs
+                    ]
+                },
+            },
+        )
+        if spec.scheduler_name != "default-scheduler":
+            events = []
+            for index, job in enumerate(jobs[:-1]):
+                started = 100.0 + index * 10
+                events.extend([
+                    {
+                        "event": "pacing_wait_started",
+                        "after_job_id": job["job_id"],
+                        "before_job_id": jobs[index + 1]["job_id"],
+                        "mode": spec.pacing_mode,
+                        "fixed_delay_seconds": spec.fixed_delay_seconds,
+                        "timestamp": started,
+                    },
+                    {
+                        "event": "pacing_wait_completed",
+                        "after_job_id": job["job_id"],
+                        "before_job_id": jobs[index + 1]["job_id"],
+                        "mode": spec.pacing_mode,
+                        "timestamp": started + spec.fixed_delay_seconds,
+                    },
+                ])
+            document["scheduler_record"] = {
+                "schema_version": 2,
+                "status": "completed",
+                "error": None,
+                "metadata": {
+                    "profile": "article-manual-bind",
+                    "run_id": spec.run_id,
+                    "expected_count": spec.jobs,
+                    "scheduler_name": spec.scheduler_name,
+                    "target_node": "node-a",
+                    "pacing_mode": spec.pacing_mode,
+                    "fixed_delay": spec.fixed_delay_seconds,
+                    "reverse": spec.reverse,
+                },
+                "records": [
+                    {
+                        "job_id": job["job_id"],
+                        "order": index + 1,
+                        "rank": job["rank"],
+                        "status": "execution_started",
+                        "bind_time": job["execution_start_time"] - 0.001,
+                        "release_time": None,
+                        "exec_start_time": job["execution_start_time"],
+                        "error": None,
+                    }
+                    for index, job in enumerate(jobs)
+                ],
+                "events": events,
+            }
+        import json
+        (runs / f"{spec.run_id}.json").write_text(json.dumps(document), encoding="utf-8")
+    report = analyze(runs_dir=runs, output_dir=tmp_path / "analysis", make_plots=False)
+    assert report["run_count"] == 70
+    assert report["strictly_complete"] is True
+    assert (tmp_path / "analysis" / "aggregate_metrics.csv").is_file()
+
+
+def _one_job_spec(*, reverse=False, pacing_mode="none", fixed_delay=0.0):
+    return RunSpec(
+        sequence=1,
+        group="test",
+        run_id="run-1",
+        scenario="test",
+        jobs=1,
+        load="normal",
+        repetition=0,
+        seed=7,
+        config="reversed" if reverse else "custom-baseline",
+        scheduler_name="ml-aware-scheduler",
+        manifest_set="custom",
+        pacing_mode=pacing_mode,
+        fixed_delay_seconds=fixed_delay,
+        reverse=reverse,
+    )
+
+
+def test_scheduler_evidence_is_validated_against_collected_jobs():
+    spec = _one_job_spec()
+    result = make_result_document(
+        run_id=spec.run_id,
+        scenario=spec.scenario,
+        config=spec.config,
+        repetition=spec.repetition,
+        seed=spec.seed,
+        expected_jobs=1,
+        source="kubernetes",
+        jobs=[{
+            "job_id": "job-a",
+            "category": "test",
+            "features": {name: 1 for name in ("T", "R", "M", "G", "C", "P")},
+            "rank": 0.625,
+            "submission_time": 99.0,
+            "execution_start_time": 101.0,
+            "completion_time": 102.0,
+            "jct_s": 3.0,
+            "status": "completed",
+            "node_name": "node-a",
+            "error": None,
+        }],
+    )
+    schedule = {
+        "schema_version": 2,
+        "status": "completed",
+        "error": None,
+        "metadata": {
+            "profile": "article-manual-bind",
+            "run_id": spec.run_id,
+            "expected_count": 1,
+            "scheduler_name": spec.scheduler_name,
+            "target_node": "node-a",
+            "pacing_mode": "none",
+            "fixed_delay": 0.0,
+            "reverse": False,
+        },
+        "records": [{
+            "job_id": "job-a",
+            "order": 1,
+            "rank": 0.625,
+            "status": "execution_started",
+            "bind_time": 100.0,
+            "release_time": None,
+            "exec_start_time": 101.0,
+            "error": None,
+        }],
+        "events": [],
+    }
+    validate_scheduler_record(spec, schedule, result, target_node="node-a")
+    schedule["records"][0]["rank"] = 0.1
+    with pytest.raises(ClusterRunError, match="rank differs"):
+        validate_scheduler_record(spec, schedule, result, target_node="node-a")
+
+
+def test_resume_validation_rejects_result_from_different_plan():
+    spec = RunSpec(
+        sequence=1,
+        group="test",
+        run_id="run-default",
+        scenario="test",
+        jobs=1,
+        load="normal",
+        repetition=0,
+        seed=7,
+        config="default",
+        scheduler_name="default-scheduler",
+        manifest_set="default",
+        pacing_mode="none",
+        fixed_delay_seconds=0.0,
+        reverse=False,
+    )
+    result = make_result_document(
+        run_id=spec.run_id,
+        scenario=spec.scenario,
+        config=spec.config,
+        repetition=spec.repetition,
+        seed=spec.seed,
+        expected_jobs=1,
+        source="kubernetes",
+        environment={"orchestration": {"plan_sha256": "wrong", "target_node": "node-a"}},
+        jobs=[{
+            "job_id": "job-a",
+            "category": "test",
+            "features": {name: 1 for name in ("T", "R", "M", "G", "C", "P")},
+            "rank": 0.625,
+            "submission_time": 1.0,
+            "execution_start_time": 2.0,
+            "completion_time": 3.0,
+            "jct_s": 2.0,
+            "status": "completed",
+            "node_name": "node-a",
+            "error": None,
+        }],
+    )
+    with pytest.raises(ClusterRunError, match="plan_sha256"):
+        validate_result_for_spec(
+            result, spec, plan_sha256="expected", target_node="node-a"
+        )
+
+
+def test_scheduler_failure_probe_aborts_before_workload_timeout():
+    spec = _one_job_spec()
+
+    class FakeKubectl:
+        def pod_json(self, namespace, selector):
+            return {
+                "items": [{
+                    "metadata": {"uid": "scheduler-uid"},
+                    "status": {
+                        "phase": "Running",
+                        "containerStatuses": [{
+                            "name": "scheduler",
+                            "ready": True,
+                            "restartCount": 0,
+                        }],
+                    },
+                }]
+            }
+
+        def run(self, *args, **kwargs):
+            return SimpleNamespace(
+                returncode=0,
+                stdout='{"status":"failed","error":"bad annotation"}',
+            )
+
+    with pytest.raises(ClusterRunError, match="bad annotation"):
+        probe_scheduler_run(
+            FakeKubectl(),
+            namespace="test",
+            deployment_name="scheduler",
+            container_name="scheduler",
+            scheduler_selector="component=scheduler",
+            expected_pod_uid="scheduler-uid",
+            results_template="/results/schedule-{run_id}.json",
+            spec=spec,
+        )

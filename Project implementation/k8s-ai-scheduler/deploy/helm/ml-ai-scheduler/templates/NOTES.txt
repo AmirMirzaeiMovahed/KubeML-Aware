@@ -1,0 +1,12 @@
+Scheduler mode: {{ .Values.mode }}
+
+Check the rollout:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "ml-ai-scheduler.fullname" . }} --timeout=180s
+
+Check health and metrics locally:
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "ml-ai-scheduler.fullname" . }} 8080:{{ .Values.service.port }}
+  curl -fsS http://127.0.0.1:8080/livez
+  curl -fsS http://127.0.0.1:8080/readyz
+  curl -fsS http://127.0.0.1:8080/metrics
+
+Do not enable more than one replica until leader election has been implemented and tested.

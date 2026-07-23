@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ml-ai-scheduler.fullname" . }}
+  labels:
+    {{- include "ml-ai-scheduler.labels" . | nindent 4 }}
+data:
+  APP_MODE: {{ .Values.mode | quote }}
+  LOG_LEVEL: {{ .Values.scheduler.logLevel | quote }}
+  SCHEDULER_NAME: {{ .Values.scheduler.name | quote }}
+  SCHEDULING_GATE: {{ .Values.scheduler.gateName | quote }}
+  RUN_ID: {{ .Values.experiment.runId | quote }}
+  SCENARIO: {{ .Values.experiment.scenario | quote }}
+  EXPERIMENT_CONFIG: {{ .Values.experiment.config | quote }}
+  REPETITION: {{ .Values.experiment.repetition | quote }}
+

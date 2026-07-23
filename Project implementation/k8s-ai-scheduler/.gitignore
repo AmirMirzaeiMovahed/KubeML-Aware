@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Environments and local configuration
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Generated experiment data. Checked-in reference results remain tracked.
+artifacts/
+workload/runs/
+workload/cluster_runs/
+results/runs/
+results/cluster/
+results/cluster_plan*.json
+results/*.tmp
+
+# Helm/package outputs and local Kubernetes credentials
+*.tgz
+kubeconfig*
+*.kubeconfig
+secrets*.yaml
+values.local.yaml

@@ -1,0 +1,41 @@
+# Long-running dynamic reproduction controller for the pre-registered 70-run
+# article matrix and optional 90-run adaptive extension. Every workload burst
+# supplies its own run contract through validated Pod annotations.
+mode: reproduction
+replicaCount: 1
+
+image:
+  repository: ml-aware-scheduler
+  tag: "0.1.0"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+scheduler:
+  name: ml-aware-scheduler
+  pacingMode: none
+  fixedDelaySeconds: 0
+  expectedCount: 0
+  quietPeriodSeconds: 1.5
+  burstTimeoutSeconds: 60
+  executionTimeoutSeconds: 120
+  maxWaitSeconds: 90
+  metricsMaxAgeSeconds: 30
+  resultsPath: "/results/schedule-{run_id}.json"
+  # Required at deployment time: --set-string scheduler.targetNode=<node>.
+  targetNode: ""
+  reverse: false
+
+experiment:
+  runId: ""
+  scenario: ""
+  config: ""
+  repetition: ""
+
+rbac:
+  create: true
+  # Dynamic run annotations can select adaptive pacing. Permission is granted
+  # up front; the runner still fails closed if the Metrics API is unavailable.
+  nodeMetricsRead: true
+
+podDisruptionBudget:
+  enabled: false

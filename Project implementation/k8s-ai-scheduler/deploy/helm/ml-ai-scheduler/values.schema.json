@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["mode", "replicaCount", "image", "scheduler", "experiment", "rbac"],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["production", "reproduction"]
+    },
+    "replicaCount": {
+      "type": "integer",
+      "const": 1
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag", "digest", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1},
+        "digest": {
+          "type": "string",
+          "pattern": "^(|sha256:[a-f0-9]{64})$"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "scheduler": {
+      "type": "object",
+      "required": [
+        "name",
+        "pacingMode",
+        "fixedDelaySeconds",
+        "expectedCount",
+        "targetNode",
+        "resultsPath"
+      ],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "pacingMode": {
+          "type": "string",
+          "enum": ["none", "fixed", "adaptive"]
+        },
+        "fixedDelaySeconds": {"type": "number", "minimum": 0},
+        "cpuThreshold": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "maxWaitSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "metricsMaxAgeSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "adaptiveHysteresis": {"type": "number", "minimum": 0, "maximum": 1},
+        "expectedCount": {"type": "integer", "minimum": 0},
+        "quietPeriodSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "burstTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "executionTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "apiTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "apiRetries": {"type": "integer", "minimum": 0},
+        "targetNode": {"type": "string"},
+        "reverse": {"type": "boolean"},
+        "resultsPath": {"type": "string", "minLength": 1}
+      }
+    },
+    "experiment": {
+      "type": "object",
+      "required": ["runId", "scenario", "config", "repetition"],
+      "properties": {
+        "runId": {"type": "string"},
+        "scenario": {"type": "string"},
+        "config": {"type": "string"},
+        "repetition": {"type": "string"}
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "required": ["create", "nodeMetricsRead"],
+      "properties": {
+        "create": {"type": "boolean"},
+        "nodeMetricsRead": {"type": "boolean"}
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
