@@ -35,9 +35,15 @@ def test_marker_is_after_initialization_and_logs_are_json(monkeypatch, capsys):
     assert event_names[:2] == ["INITIALIZATION_COMPLETED", "EXECUTION_STARTED"]
     assert event_names[-1] == "EXECUTION_COMPLETED"
     assert events[1]["job_id"] == "job-a"
+    assert events[0]["blas_runtime"]["expected_threads"] == 1
+    assert events[0]["blas_runtime"]["libraries"]
+    assert {
+        pool["num_threads"] for pool in events[0]["blas_runtime"]["libraries"]
+    } == {1}
     assert result["steps"] == 1
     assert result["termination_reason"] == "converged"
     assert result["work_model_version"] == train.WORK_MODEL_VERSION
+    assert result["blas_threads"] == 1
 
 
 def test_partition_and_checkpoint_work_is_observable(monkeypatch, tmp_path, capsys):

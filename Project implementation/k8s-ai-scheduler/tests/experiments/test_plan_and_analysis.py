@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -5,6 +7,7 @@ import pandas as pd
 import pytest
 
 from experiments.analyze import _mean_ci95, analyze, paired_improvement_table
+from experiments.controls import execution_controls_contract
 from experiments.run_cluster import (
     DEFAULT_PLAN,
     ClusterRunError,
@@ -19,6 +22,63 @@ from experiments.run_cluster import (
     validate_scheduler_record,
 )
 from experiments.schema import make_result_document
+from k8s.work_model import WORK_MODEL_VERSION
+
+
+TRAINER_IMAGE = "registry.example/ml-sim@sha256:" + "a" * 64
+
+
+def _audit_snapshot():
+    prewarm = {
+        "schema_version": "1.0",
+        "status": "passed",
+        "pod_name": "prewarm",
+        "pod_uid": "prewarm-uid",
+        "target_node": "node-a",
+        "requested_image": TRAINER_IMAGE,
+        "runtime_image_id": "containerd://image@sha256:" + "d" * 64,
+        "creation_timestamp": "2026-01-01T00:00:00Z",
+        "start_timestamp": "2026-01-01T00:00:01Z",
+        "finished_timestamp": "2026-01-01T00:00:02Z",
+        "attestation": {
+            "event": "PREWARM_ATTESTATION",
+            "blas_runtime": {
+                "expected_threads": 1,
+                "libraries": [{"user_api": "blas", "num_threads": 1}],
+            },
+        },
+    }
+    prewarm["evidence_sha256"] = hashlib.sha256(
+        json.dumps(
+            prewarm, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+    ).hexdigest()
+    return {
+        "target_node": {"name": "node-a"},
+        "kubernetes_version": {},
+        "helm": {"version": "test"},
+        "reproduction_policy": {
+            "profile": "article-exact",
+            "article_claim_eligible": True,
+            "errors": [],
+        },
+        "minikube": {
+            "profile": "paper",
+            "driver": "docker",
+            "profile_status": "Running",
+        },
+        "execution_controls": {
+            "contract": execution_controls_contract(),
+            "prewarm": prewarm,
+            "pre_run_cooldown": {
+                "elapsed_seconds": 30.0,
+                "clean_polls": 3,
+                "workload_pods_observed": 0,
+                "scheduler_continuity": True,
+                "node_pressure_clear": True,
+            },
+        },
+    }
 
 
 def test_registered_plan_has_exact_70_and_optional_90_runs():
@@ -163,6 +223,11 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                 "status": "completed",
                 "node_name": "node-a",
                 "error": None,
+                "trainer_evidence": {
+                    "work_model_version": WORK_MODEL_VERSION,
+                    "blas_threads": 1,
+                    "blas_library_count": 1,
+                },
             })
         submission = {
             "schema_version": "1.0",
@@ -193,6 +258,7 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                 for index, job in enumerate(jobs)
             ],
         }
+        cluster_snapshot = _audit_snapshot()
         document = make_result_document(
             run_id=spec.run_id,
             scenario=spec.scenario,
@@ -206,7 +272,7 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                     "orchestration": {
                     "plan_sha256": plan_hash,
                     "target_node": "node-a",
-                    "trainer_image": "registry.example/ml-sim@sha256:" + "a" * 64,
+                    "trainer_image": TRAINER_IMAGE,
                     "kubectl_context": "test-context",
                     "scheduler_deployment": "scheduler",
                     "artifact_sha256": {
@@ -216,20 +282,10 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                             for job in jobs
                         },
                     },
-                        "cluster_snapshot_sha256": _canonical_sha256(
-                        {
-                            "target_node": {"name": "node-a"},
-                            "kubernetes_version": {},
-                            "helm": {"version": "test"},
-                            }
-                        ),
+                        "cluster_snapshot_sha256": _canonical_sha256(cluster_snapshot),
                         "submission_sha256": _canonical_sha256(submission),
                     },
-                "cluster_snapshot": {
-                    "target_node": {"name": "node-a"},
-                    "kubernetes_version": {},
-                    "helm": {"version": "test"},
-                },
+                "cluster_snapshot": cluster_snapshot,
                     "kubernetes": {
                     "workload_pods": [
                         {"name": job["job_id"], "node_name": "node-a"}
@@ -289,7 +345,6 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                 ],
                 "events": events,
             }
-        import json
         (runs / f"{spec.run_id}.json").write_text(json.dumps(document), encoding="utf-8")
     report = analyze(runs_dir=runs, output_dir=tmp_path / "analysis", make_plots=False)
     assert report["run_count"] == 70

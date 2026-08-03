@@ -27,6 +27,7 @@ def _pod(name="light-000-12345678", phase="Succeeded"):
         "ml.scheduler/seed": "1",
         "ml.scheduler/load-profile": "normal",
         "ml.scheduler/work-model-version": WORK_MODEL_VERSION,
+        "ml.scheduler/blas-threads": "1",
     }
     labels = {
         "ml.scheduler/run-id": "run-1",
@@ -65,6 +66,11 @@ def _pod(name="light-000-12345678", phase="Succeeded"):
                     SimpleNamespace(
                         name="ML_WORK_MODEL_VERSION",
                         value=WORK_MODEL_VERSION,
+                        value_from=None,
+                    ),
+                    SimpleNamespace(
+                        name="ML_NUM_THREADS",
+                        value="1",
                         value_from=None,
                     ),
                     *[
@@ -123,6 +129,8 @@ def _success_logs(pod, *, started=101.0, completed=105.0):
         "checkpoint_count": estimate.checkpoint_count,
         "checkpoint_seconds": 0.01,
         "duration_seconds": completed - started,
+        "blas_threads": 1,
+        "blas_library_count": 1,
     }
     return "\n".join([
         json.dumps({
@@ -130,6 +138,10 @@ def _success_logs(pod, *, started=101.0, completed=105.0):
             "timestamp": started - 0.1,
             "job_id": pod.metadata.name,
             "work_model": estimate.to_dict(),
+            "blas_runtime": {
+                "expected_threads": 1,
+                "libraries": [{"user_api": "blas", "num_threads": 1}],
+            },
         }),
         json.dumps({
             "event": "EXECUTION_STARTED",

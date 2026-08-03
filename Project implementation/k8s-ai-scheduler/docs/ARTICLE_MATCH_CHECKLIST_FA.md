@@ -37,6 +37,7 @@
 | [x] | چهار گروه workload مصنوعی | Generator چهار category قطعی با seed دارد | تست sampling و ID قطعی |
 | [?] | توزیع دقیق ویژگی‌های هر گروه | مقاله پارامتر کامل منتشر نکرده؛ ranges/weights پروژه در `jobs.json` ثبت می‌شود | باید به‌عنوان assumption گزارش شود |
 | [x] | Matrix multiplication | Trainer با NumPy/BLAS و seed قطعی اجرا می‌کند | unit test؛ عملکرد واقعی Server pending |
+| [x] | BLAS تک‌نخی | `threadpoolctl` تعداد thread واقعی را محدود و در prewarm و هر Job ثبت می‌کند | mismatch باعث رد run می‌شود؛ runtime Server pending |
 | [x] | کاهش نمایی Loss با `R` | `loss *= exp(-R)` | تست Trainer |
 | [x] | Checkpoint interval `C` | هر `C` گام یک payload محدود روی دیسک نوشته و `fsync` می‌شود | تست اندازه فایل و شمارش checkpoint |
 | [x] | Partition count `P` | ردیف‌های ماتریس بدون هم‌پوشانی تقسیم و برای هر peer بافر `G` کپی می‌شود | تست پوشش ردیف‌ها؛ همچنان proxy تک‌نودی است |
@@ -81,6 +82,7 @@ Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 | [x] | رد داده ناقص | Collector fail-closed و failure artifact | missing/failed/duplicate/mismatch رد می‌شود |
 | [x] | اثبات ترتیب واقعی | scheduler record در نتیجه custom embed و جداگانه archive می‌شود | rank/order/job set/timestamp/pacing دقیقاً validate می‌شود |
 | [x] | متادیتای بازتولید | Plan/artifact hash، context، Helm، Kubernetes، Node و image IDs | نبود یا mismatch باعث رد resume/analysis می‌شود |
+| [x] | کنترل cache/carryover | prewarm همان digest روی Node و cooldown تمیز ۳۰ ثانیه‌ای قبل هر run | شاهد Minikube Docker، BLAS، pressure و continuity داخل snapshot hash |
 
 ## Docker، امنیت و Kubernetes
 

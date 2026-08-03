@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 
-RESULT_SCHEMA_VERSION = "1.0"
+RESULT_SCHEMA_VERSION = "1.1"
 RESULT_KIND = "ml-scheduler-experiment-run"
 FEATURE_NAMES = ("T", "R", "M", "G", "C", "P")
 TERMINAL_JOB_STATUSES = {"completed", "failed", "invalid", "missing"}

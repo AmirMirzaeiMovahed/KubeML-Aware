@@ -51,11 +51,24 @@ from experiments.submission import (  # noqa: E402
     BurstSubmissionError,
     submit_burst,
 )
+from experiments.controls import (  # noqa: E402
+    DEFAULT_COOLDOWN_CLEAN_POLLS,
+    DEFAULT_COOLDOWN_SECONDS,
+    execution_controls_contract,
+    prewarm_pod_manifest,
+    validate_cooldown_evidence,
+    validate_execution_controls_evidence,
+    validate_minikube_attestation,
+    validate_prewarm_observation,
+)
 from results.metrics_collector import collect  # noqa: E402
-from k8s.work_model import WORK_MODEL_VERSION  # noqa: E402
+from k8s.work_model import (  # noqa: E402
+    REPRODUCTION_BLAS_THREADS,
+    WORK_MODEL_VERSION,
+)
 
 
-PLAN_SCHEMA_VERSION = "1.1"
+PLAN_SCHEMA_VERSION = "1.2"
 DEFAULT_PLAN = Path(__file__).with_name("scenarios.yaml")
 SCHEDULE_SCHEMA_VERSION = 2
 DEFAULT_SCHEDULER_DEPLOYMENT = "ml-ai-scheduler-ml-ai-scheduler"
@@ -97,6 +110,8 @@ def _read_yaml(path: Path) -> Mapping[str, Any]:
 
 def expand_plan(path: Path = DEFAULT_PLAN, *, include_adaptive: bool = False) -> List[RunSpec]:
     document = _read_yaml(path)
+    if document.get("execution_controls") != execution_controls_contract():
+        raise ValueError("plan execution_controls has drifted from the runner")
     declared_load_profiles = document.get("load_profiles")
     if not isinstance(declared_load_profiles, Mapping):
         raise ValueError("load_profiles is missing")
@@ -458,11 +473,18 @@ class Kubectl:
         if context:
             self.prefix.extend(["--context", context])
 
-    def run(self, *arguments: str, timeout: float = 60.0, check: bool = True) -> subprocess.CompletedProcess[str]:
+    def run(
+        self,
+        *arguments: str,
+        timeout: float = 60.0,
+        check: bool = True,
+        input_text: Optional[str] = None,
+    ) -> subprocess.CompletedProcess[str]:
         completed = subprocess.run(
             [*self.prefix, *arguments],
             text=True,
             capture_output=True,
+            input=input_text,
             timeout=timeout,
             check=False,
         )
@@ -506,6 +528,181 @@ def _run_local_command(arguments: Sequence[str], *, timeout: float = 60.0) -> st
             f"stdout: {completed.stdout}\nstderr: {completed.stderr}"
         )
     return completed.stdout
+
+
+def capture_minikube_environment(
+    *, executable: str, profile: str
+) -> Dict[str, Any]:
+    version = _run_local_command([executable, "version"], timeout=30)
+    try:
+        profiles = json.loads(
+            _run_local_command(
+                [executable, "profile", "list", "--output", "json"], timeout=30
+            )
+        )
+        status = json.loads(
+            _run_local_command(
+                [executable, "status", "--profile", profile, "--output", "json"],
+                timeout=30,
+            )
+        )
+    except json.JSONDecodeError as exc:
+        raise ClusterRunError("Minikube returned invalid JSON attestation") from exc
+    if not isinstance(profiles, Mapping) or not isinstance(status, Mapping):
+        raise ClusterRunError("Minikube attestation must contain JSON objects")
+    try:
+        return validate_minikube_attestation(
+            profiles, status, profile=profile, version=version
+        )
+    except ValueError as exc:
+        raise ClusterRunError(str(exc)) from exc
+
+
+def prewarm_trainer_image(
+    kubectl: Kubectl,
+    *,
+    namespace: str,
+    target_node: str,
+    image: str,
+    image_pull_secrets: Sequence[str],
+) -> Dict[str, Any]:
+    manifest = prewarm_pod_manifest(
+        namespace=namespace,
+        target_node=target_node,
+        image=image,
+        image_pull_secrets=image_pull_secrets,
+    )
+    name = str((manifest.get("metadata") or {})["name"])
+    kubectl.run(
+        "delete",
+        "pod",
+        name,
+        "-n",
+        namespace,
+        "--ignore-not-found=true",
+        "--wait=true",
+        "--timeout=60s",
+        timeout=90,
+    )
+    try:
+        kubectl.run(
+            "create",
+            "-f",
+            "-",
+            input_text=json.dumps(manifest, separators=(",", ":")),
+            timeout=60,
+        )
+        kubectl.run(
+            "wait",
+            "-n",
+            namespace,
+            f"pod/{name}",
+            "--for=jsonpath={.status.phase}=Succeeded",
+            "--timeout=300s",
+            timeout=330,
+        )
+        pod = kubectl.json("get", "pod", name, "-n", namespace, timeout=30)
+        logs = kubectl.run(
+            "logs", name, "-n", namespace, "-c", "attest", timeout=30
+        ).stdout
+        return validate_prewarm_observation(
+            pod, logs, expected_image=image, target_node=target_node
+        )
+    except ValueError as exc:
+        raise ClusterRunError(f"trainer prewarm attestation failed: {exc}") from exc
+    finally:
+        kubectl.run(
+            "delete",
+            "pod",
+            name,
+            "-n",
+            namespace,
+            "--ignore-not-found=true",
+            "--wait=true",
+            "--timeout=60s",
+            timeout=90,
+            check=False,
+        )
+
+
+def wait_for_cooldown(
+    kubectl: Kubectl,
+    *,
+    namespace: str,
+    target_node: str,
+    scheduler_selector: str,
+    expected_scheduler_uid: str,
+    cooldown_seconds: float,
+    minimum_clean_polls: int,
+    poll_seconds: float = 2.0,
+) -> Dict[str, Any]:
+    started_at = datetime.now(timezone.utc)
+    started = time.monotonic()
+    deadline = started + cooldown_seconds
+    clean_polls = 0
+    last_conditions: Dict[str, str] = {}
+    while True:
+        workloads = kubectl.pod_json(
+            namespace, "app.kubernetes.io/name=ml-sim-job"
+        ).get("items") or []
+        if workloads:
+            raise ClusterRunError("workload Pods appeared during cooldown")
+        scheduler_pods = kubectl.pod_json(namespace, scheduler_selector).get("items") or []
+        if len(scheduler_pods) != 1:
+            raise ClusterRunError("scheduler Pod count changed during cooldown")
+        scheduler = scheduler_pods[0]
+        scheduler_metadata = scheduler.get("metadata") or {}
+        scheduler_status = scheduler.get("status") or {}
+        statuses = scheduler_status.get("containerStatuses") or []
+        if (
+            scheduler_metadata.get("uid") != expected_scheduler_uid
+            or scheduler_status.get("phase") != "Running"
+            or not statuses
+            or any(
+                not status.get("ready") or status.get("restartCount") != 0
+                for status in statuses
+            )
+        ):
+            raise ClusterRunError("scheduler continuity failed during cooldown")
+        node = kubectl.json("get", "node", target_node, timeout=30)
+        last_conditions = {
+            str(condition.get("type")): str(condition.get("status"))
+            for condition in ((node.get("status") or {}).get("conditions") or [])
+        }
+        pressure_clear = all(
+            last_conditions.get(name) == "False"
+            for name in ("MemoryPressure", "DiskPressure", "PIDPressure")
+        )
+        if last_conditions.get("Ready") != "True" or not pressure_clear:
+            raise ClusterRunError("node became unready or pressured during cooldown")
+        clean_polls += 1
+        now = time.monotonic()
+        if now >= deadline and clean_polls >= minimum_clean_polls:
+            break
+        remaining = max(0.0, deadline - now)
+        time.sleep(min(poll_seconds, remaining) if remaining else poll_seconds)
+    evidence = {
+        "schema_version": "1.0",
+        "policy": "fixed-window-clean-node-and-scheduler-continuity",
+        "started_at": started_at.isoformat().replace("+00:00", "Z"),
+        "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "configured_seconds": cooldown_seconds,
+        "elapsed_seconds": time.monotonic() - started,
+        "clean_polls": clean_polls,
+        "workload_pods_observed": 0,
+        "scheduler_uid": expected_scheduler_uid,
+        "scheduler_continuity": True,
+        "node_pressure_clear": True,
+        "final_node_conditions": last_conditions,
+    }
+    errors = validate_cooldown_evidence(
+        evidence,
+        expected_seconds=cooldown_seconds,
+        expected_clean_polls=minimum_clean_polls,
+    )
+    if errors:
+        raise ClusterRunError("invalid cooldown evidence: " + "; ".join(errors))
+    return evidence
 
 
 def capture_and_verify_helm_release(
@@ -1174,6 +1371,28 @@ def validate_result_for_spec(
             mismatches["reproduction_policy"] = (
                 policy, "eligible article-exact policy"
             )
+        if require_article_environment:
+            minikube = snapshot.get("minikube")
+            if (
+                not isinstance(minikube, Mapping)
+                or minikube.get("driver") != "docker"
+                or str(minikube.get("profile_status") or "").lower()
+                != "running"
+            ):
+                mismatches["minikube"] = (
+                    minikube,
+                    "running Docker-driver profile attestation",
+                )
+            control_errors = validate_execution_controls_evidence(
+                snapshot.get("execution_controls") or {},
+                expected_image=str(trainer_image),
+                target_node=target_node,
+            )
+            if control_errors:
+                mismatches["execution_controls"] = (
+                    control_errors,
+                    "valid prewarm, BLAS and cooldown evidence",
+                )
 
     submission = environment.get("submission")
     if not isinstance(submission, Mapping):
@@ -1253,6 +1472,25 @@ def validate_result_for_spec(
     ]
     if wrong_nodes:
         mismatches["job_node_names"] = (wrong_nodes, target_node)
+    if require_article_environment:
+        invalid_trainer_evidence = []
+        for job in document.get("jobs") or []:
+            evidence = job.get("trainer_evidence") if isinstance(job, Mapping) else None
+            if (
+                not isinstance(evidence, Mapping)
+                or evidence.get("work_model_version") != WORK_MODEL_VERSION
+                or evidence.get("blas_threads") != REPRODUCTION_BLAS_THREADS
+                or not isinstance(evidence.get("blas_library_count"), int)
+                or evidence.get("blas_library_count", 0) <= 0
+            ):
+                invalid_trainer_evidence.append(
+                    job.get("job_id") if isinstance(job, Mapping) else None
+                )
+        if invalid_trainer_evidence:
+            mismatches["trainer_evidence"] = (
+                invalid_trainer_evidence,
+                "versioned work model and single-thread BLAS evidence for every job",
+            )
     if mismatches:
         raise ClusterRunError(f"result does not match RunSpec: {mismatches}")
     if spec.scheduler_name != "default-scheduler":
@@ -1514,6 +1752,8 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--kubectl", default="kubectl")
     parser.add_argument("--helm", default="helm")
+    parser.add_argument("--minikube", default="minikube")
+    parser.add_argument("--minikube-profile", default=None)
     parser.add_argument("--helm-release", default="ml-ai-scheduler")
     parser.add_argument("--context", default=None)
     parser.add_argument("--target-node", default=None)
@@ -1526,6 +1766,12 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     )
     parser.add_argument("--timeout-seconds", type=float, default=3600.0)
     parser.add_argument("--poll-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--cooldown-seconds", type=float, default=DEFAULT_COOLDOWN_SECONDS
+    )
+    parser.add_argument(
+        "--cooldown-clean-polls", type=int, default=DEFAULT_COOLDOWN_CLEAN_POLLS
+    )
     parser.add_argument(
         "--environment-profile",
         choices=("article-exact", "record-only"),
@@ -1552,6 +1798,10 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     if args.timeout_seconds <= 0 or args.poll_seconds <= 0:
         parser.error("timeouts and polling interval must be > 0")
+    if not math.isfinite(args.cooldown_seconds) or args.cooldown_seconds < 0:
+        parser.error("--cooldown-seconds must be finite and >= 0")
+    if args.cooldown_clean_polls <= 0:
+        parser.error("--cooldown-clean-polls must be > 0")
     if args.submission_workers <= 0:
         parser.error("--submission-workers must be > 0")
     if (
@@ -1572,6 +1822,16 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             "--scheduling-gate is incompatible with the registered article matrix; "
             "it would contaminate default baselines"
         )
+    if args.execute and args.environment_profile == "article-exact":
+        if args.cooldown_seconds != DEFAULT_COOLDOWN_SECONDS:
+            parser.error(
+                f"article-exact requires --cooldown-seconds={DEFAULT_COOLDOWN_SECONDS}"
+            )
+        if args.cooldown_clean_polls != DEFAULT_COOLDOWN_CLEAN_POLLS:
+            parser.error(
+                "article-exact requires --cooldown-clean-polls="
+                f"{DEFAULT_COOLDOWN_CLEAN_POLLS}"
+            )
     specs = expand_plan(args.plan, include_adaptive=args.include_adaptive)
     expanded_plan = plan_document(
         specs, include_adaptive=args.include_adaptive, source_plan=args.plan
@@ -1635,6 +1895,26 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         require_metrics=args.include_adaptive,
     )
     _ensure_clean_cluster(kubectl, args.namespace)
+    minikube_profile = args.minikube_profile or args.context or "minikube"
+    if args.environment_profile == "article-exact":
+        minikube_environment = capture_minikube_environment(
+            executable=args.minikube,
+            profile=minikube_profile,
+        )
+    else:
+        minikube_environment = {
+            "profile": minikube_profile,
+            "driver": None,
+            "profile_status": "not-required-for-record-only",
+        }
+    prewarm_evidence = prewarm_trainer_image(
+        kubectl,
+        namespace=args.namespace,
+        target_node=args.target_node,
+        image=args.image,
+        image_pull_secrets=args.image_pull_secret,
+    )
+    _ensure_clean_cluster(kubectl, args.namespace)
     cluster_environment = capture_cluster_environment(
         kubectl,
         namespace=args.namespace,
@@ -1643,6 +1923,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         scheduler_selector="app.kubernetes.io/component=scheduler",
     )
     cluster_environment["helm"] = helm_environment
+    cluster_environment["minikube"] = minikube_environment
+    cluster_environment["execution_controls"] = {
+        "contract": execution_controls_contract(),
+        "prewarm": prewarm_evidence,
+    }
     try:
         cluster_environment["reproduction_policy"] = validate_article_environment(
             cluster_environment,
@@ -1678,6 +1963,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         raise ClusterRunError(
             "scheduler Pod must be Running, Ready, restart-free, and expose imageID"
         )
+    expected_scheduler_uid = str(scheduler_pods[0]["uid"])
     if args.include_adaptive:
         containers = (
             ((deployment.get("spec") or {}).get("template") or {})
@@ -1732,6 +2018,15 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             image_pull_secrets=args.image_pull_secret,
         )
         _ensure_clean_cluster(kubectl, args.namespace)
+        cooldown_evidence = wait_for_cooldown(
+            kubectl,
+            namespace=args.namespace,
+            target_node=args.target_node,
+            scheduler_selector="app.kubernetes.io/component=scheduler",
+            expected_scheduler_uid=expected_scheduler_uid,
+            cooldown_seconds=args.cooldown_seconds,
+            minimum_clean_polls=args.cooldown_clean_polls,
+        )
         run_environment = capture_cluster_environment(
             kubectl,
             namespace=args.namespace,
@@ -1740,6 +2035,12 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             scheduler_selector="app.kubernetes.io/component=scheduler",
         )
         run_environment["helm"] = helm_environment
+        run_environment["minikube"] = minikube_environment
+        run_environment["execution_controls"] = {
+            "contract": execution_controls_contract(),
+            "prewarm": prewarm_evidence,
+            "pre_run_cooldown": cooldown_evidence,
+        }
         run_environment["reproduction_policy"] = validate_article_environment(
             run_environment,
             experiment_namespace=args.namespace,

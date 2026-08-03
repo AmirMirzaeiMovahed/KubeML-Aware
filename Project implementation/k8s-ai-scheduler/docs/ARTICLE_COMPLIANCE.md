@@ -46,13 +46,16 @@ published measurements have already been reproduced.
 | Partition overhead `P` | disjoint matrix row partitions plus `G`-MiB peer copies | Implemented/local | Physical synchronization proxy, not multi-node distributed training |
 | `T` is derived estimate, not termination | shared work model | Implemented/local | Generator, trainer evidence, and simulator share model version `2.0` |
 | No workload requests/limits | reproduction manifests only | Server pending | Deliberately isolated profile; not a production default |
-| Controlled BLAS concurrency | trainer image environment | Implemented/local | One thread by default for repeatability |
+| Controlled BLAS concurrency | env plus `threadpoolctl` runtime limit/attestation | Implemented/local | Every successful job and prewarm proves one actual BLAS thread |
 
 ## Experiment protocol
 
 | Article requirement | Concrete matrix/implementation | Status |
 |---|---|---|
 | Single-node Minikube, 4 CPU, 8 GiB | fail-closed `article-exact` environment policy | Implemented/local; server pending |
+| Minikube Docker driver | profile/status JSON attestation | Implemented/local; server pending |
+| Trainer image cache state | digest-pinned target-node prewarm Pod | Implemented/local; server pending |
+| Inter-run carryover | registered 30-second clean cooldown with node-pressure and scheduler-continuity polls | Implemented/local; server pending |
 | Clean isolated runs | target-node inventory rejects every active non-system/non-scheduler Pod before each run | Implemented/local; server pending |
 | Identical default/custom workload | deterministic paired generation | Implemented/local; server pairing pending |
 | 12 jobs normal | `12-normal` | Server pending |
@@ -160,8 +163,9 @@ until strict collection and evidence validation succeed.
 ## Known article ambiguities that cannot be invented
 
 Exact original feature ranges/proportions, random seeds, calibration method for
-rank weights, training constants, image/cache warm-up policy, burst duration,
+rank weights, training constants, burst duration,
 software versions, host hardware, percentile interpolation, and complete node
 filtering logic are not fully specified by the article. Repository choices for
 these items must be recorded as reproduction assumptions, not attributed to
-the authors.
+the authors. Cache warm-up and cooldown are now explicit registered repository
+choices rather than silent environmental differences.

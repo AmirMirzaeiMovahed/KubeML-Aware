@@ -78,6 +78,7 @@ def validate_plan_coverage(
             spec,
             plan_sha256=registered_plan["plan_sha256"],
             target_node=target_node,
+            require_article_environment=True,
         )
         run = document["run"]
         mismatches = {

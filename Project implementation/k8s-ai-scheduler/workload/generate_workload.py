@@ -33,6 +33,9 @@ import yaml
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from k8s.work_model import (  # noqa: E402
+    BLAS_THREADS_ANNOTATION,
+    BLAS_THREADS_ENV,
+    REPRODUCTION_BLAS_THREADS,
     WORK_MODEL_ANNOTATION,
     WORK_MODEL_ENV,
     WORK_MODEL_VERSION,
@@ -476,6 +479,7 @@ def _pod_manifest(
         "ml.scheduler/seed": str(seed),
         "ml.scheduler/load-profile": load_profile,
         WORK_MODEL_ANNOTATION: WORK_MODEL_VERSION,
+        BLAS_THREADS_ANNOTATION: str(REPRODUCTION_BLAS_THREADS),
     })
 
     spec: Dict[str, Any] = {
@@ -512,6 +516,10 @@ def _pod_manifest(
                 },
                 {"name": "JOB_SEED", "value": str(deterministic_job_seed(seed, job.job_id))},
                 {"name": WORK_MODEL_ENV, "value": WORK_MODEL_VERSION},
+                {
+                    "name": BLAS_THREADS_ENV,
+                    "value": str(REPRODUCTION_BLAS_THREADS),
+                },
                 *[
                     {"name": f"JOB_{name}", "value": str(getattr(job, name))}
                     for name in FEATURE_NAMES

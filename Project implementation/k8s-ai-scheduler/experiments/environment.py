@@ -101,9 +101,16 @@ def validate_article_environment(
     if len(nodes) != 1:
         errors.append(f"expected exactly one Kubernetes node; observed {len(nodes)}")
     context = str(snapshot.get("kubectl_context") or "").lower()
+    minikube = snapshot.get("minikube") or {}
     minikube_label = any(str(key).startswith("minikube.k8s.io/") for key in labels)
     if "minikube" not in context and not minikube_label:
         errors.append("cluster is not identifiable as Minikube")
+    if not isinstance(minikube, Mapping) or minikube.get("driver") != "docker":
+        errors.append("Minikube Docker-driver attestation is missing or invalid")
+    if isinstance(minikube, Mapping) and str(
+        minikube.get("profile_status") or ""
+    ).lower() != "running":
+        errors.append("Minikube profile is not attested as Running")
     try:
         cpu = parse_quantity(capacity.get("cpu"))
         if not math.isclose(cpu, 4.0, rel_tol=0.0, abs_tol=1e-9):
@@ -142,6 +149,7 @@ def validate_article_environment(
         "article_claim_eligible": profile == "article-exact" and not errors,
         "expected": {
             "cluster": "Minikube",
+            "driver": "docker",
             "nodes": 1,
             "cpu_cores": 4,
             "memory_gib_range": [7.5, 8.5],
@@ -152,6 +160,12 @@ def validate_article_environment(
             "cpu_cores": cpu,
             "memory_bytes": memory_bytes,
             "unexpected_active_pods": unexpected,
+            "minikube_profile": (
+                minikube.get("profile") if isinstance(minikube, Mapping) else None
+            ),
+            "minikube_driver": (
+                minikube.get("driver") if isinstance(minikube, Mapping) else None
+            ),
         },
         "errors": errors,
     }

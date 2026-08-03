@@ -130,11 +130,13 @@ def test_pod_yaml_is_valid_and_contains_run_contract():
     assert annotations["ml.scheduler/reverse"] == "false"
     assert annotations["ml.scheduler/expected-jobs"] == "12"
     assert annotations["ml.scheduler/work-model-version"] == WORK_MODEL_VERSION
+    assert annotations["ml.scheduler/blas-threads"] == "1"
     environment = {
         item["name"]: item.get("value")
         for item in manifest["spec"]["containers"][0]["env"]
     }
     assert environment["ML_WORK_MODEL_VERSION"] == WORK_MODEL_VERSION
+    assert environment["ML_NUM_THREADS"] == "1"
     assert manifest["spec"]["automountServiceAccountToken"] is False
     assert manifest["spec"]["imagePullSecrets"] == [
         {"name": "registry-credentials"}

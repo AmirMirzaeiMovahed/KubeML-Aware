@@ -54,6 +54,10 @@ for _name in (
 os.environ["OMP_DYNAMIC"] = "FALSE"
 
 import numpy as np  # noqa: E402  (must follow BLAS environment setup)
+from threadpoolctl import threadpool_info, threadpool_limits  # noqa: E402
+
+
+_BLAS_LIMITER = threadpool_limits(limits=int(_THREADS), user_api="blas")
 
 
 MAX_MATRIX_DIMENSION = 4096
@@ -177,6 +181,42 @@ def _handle_signal(signum: int, _frame: Any) -> None:
     _shutdown_signal = signum
 
 
+def blas_runtime_evidence() -> Dict[str, Any]:
+    """Return normalized thread-pool evidence or fail before useful work."""
+
+    pools = [pool for pool in threadpool_info() if pool.get("user_api") == "blas"]
+    normalized = [
+        {
+            key: pool.get(key)
+            for key in (
+                "user_api",
+                "internal_api",
+                "prefix",
+                "version",
+                "threading_layer",
+                "architecture",
+                "num_threads",
+            )
+        }
+        for pool in pools
+    ]
+    if not normalized:
+        raise RuntimeError("no BLAS runtime was detected by threadpoolctl")
+    mismatched = [
+        pool
+        for pool in normalized
+        if pool.get("num_threads") != int(_THREADS)
+    ]
+    if mismatched:
+        raise RuntimeError(
+            f"BLAS runtime does not honor ML_NUM_THREADS={_THREADS}: {mismatched}"
+        )
+    return {
+        "expected_threads": int(_THREADS),
+        "libraries": normalized,
+    }
+
+
 def run_training(config: TrainingConfig) -> Dict[str, Any]:
     """Execute physical compute, gradient, synchronization and checkpoint work."""
     global _shutdown_signal
@@ -194,6 +234,7 @@ def run_training(config: TrainingConfig) -> Dict[str, Any]:
     partitions = partition_row_ranges(config.M, config.P)
     checkpoint_path = _checkpoint_path(config.job_id)
     loss = INITIAL_LOSS
+    blas_runtime = blas_runtime_evidence()
 
     emit_event(
         "INITIALIZATION_COMPLETED",
@@ -205,6 +246,7 @@ def run_training(config: TrainingConfig) -> Dict[str, Any]:
         estimated_T_error_seconds=config.T - model.estimated_training_seconds,
         partition_rows=[list(item) for item in partitions],
         blas_threads=int(_THREADS),
+        blas_runtime=blas_runtime,
     )
     started_at = time.time()
     emit_event("EXECUTION_STARTED", timestamp=started_at, job_id=config.job_id)
@@ -264,6 +306,8 @@ def run_training(config: TrainingConfig) -> Dict[str, Any]:
         "checkpoint_bytes": model.checkpoint_bytes,
         "checkpoint_count": checkpoint_count,
         "checkpoint_seconds": checkpoint_seconds,
+        "blas_threads": int(_THREADS),
+        "blas_library_count": len(blas_runtime["libraries"]),
         "duration_seconds": completed_at - started_at,
     }
     emit_event("EXECUTION_COMPLETED", timestamp=completed_at, **result)
@@ -278,7 +322,7 @@ def main() -> int:
         emit_event("JOB_CONFIG", job_id=config.job_id, config=asdict(config))
         run_training(config)
         return 0
-    except (ValueError, MemoryError, InterruptedError) as exc:
+    except (ValueError, MemoryError, InterruptedError, RuntimeError) as exc:
         emit_event(
             "EXECUTION_FAILED",
             job_id=os.environ.get("JOB_ID", "unknown-job"),

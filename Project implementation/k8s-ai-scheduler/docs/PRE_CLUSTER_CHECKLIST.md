@@ -83,6 +83,8 @@ output is captured.
       registry is private.
 - [ ] Scheduler image imports its runtime packages as non-root.
 - [ ] Trainer image imports NumPy and respects controlled BLAS thread variables.
+- [ ] Trainer prewarm attestation reports exactly one actual BLAS thread for
+      every detected BLAS library on the target node.
 
 ## E. Helm installation and security validation
 
@@ -133,6 +135,10 @@ output is captured.
 - [ ] Every run has one unique `ml.scheduler/run-id`.
 - [ ] Scenario, config, and repetition labels match the matrix.
 - [ ] No two reproduction runs execute concurrently on the target node.
+- [ ] Minikube profile/status evidence proves the registered Docker driver.
+- [ ] The exact trainer digest is prewarmed and its runtime image ID archived.
+- [ ] Every run has at least the registered 30-second clean cooldown, three
+      clean polls, clear Node pressure conditions, and scheduler UID continuity.
 - [ ] Cluster/image/tool metadata is captured for each run.
 - [ ] Requested trainer digest, runtime image IDs, scheduler digest, target
       node, context, artifact hashes, and cluster snapshot are present.

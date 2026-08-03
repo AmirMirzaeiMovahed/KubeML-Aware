@@ -6,3 +6,4 @@ numpy==2.3.5
 pandas==3.0.3
 prometheus-client==0.25.0
 PyYAML==6.0.3
+threadpoolctl==3.6.0

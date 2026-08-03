@@ -177,7 +177,13 @@ target node, digest-pinned trainer image, and the live dynamic reproduction
 Deployment. The runner validates the complete observed Pod contract, reuses
 reviewed manifests only when they still match exactly, archives scheduler
 order/pacing records before cleanup, captures image and cluster metadata, and
-refuses a scheduling gate on default baselines. Exact Linux commands are in
+refuses a scheduling gate on default baselines. It now also attests the running
+Minikube Docker profile, prewarms
+the exact trainer digest on the target node, proves the actual BLAS pool is
+single-threaded, and enforces a registered 30-second clean cooldown before
+every run. These control records are covered by the per-run snapshot hash;
+strict resume and analysis reject missing or altered evidence.
+Exact Linux commands are in
 [`run_on_cluster.md`](run_on_cluster.md).
 
 ## Result acceptance rules

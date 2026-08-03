@@ -16,6 +16,9 @@ from typing import Any
 WORK_MODEL_VERSION = "2.0"
 WORK_MODEL_ANNOTATION = "ml.scheduler/work-model-version"
 WORK_MODEL_ENV = "ML_WORK_MODEL_VERSION"
+BLAS_THREADS_ENV = "ML_NUM_THREADS"
+BLAS_THREADS_ANNOTATION = "ml.scheduler/blas-threads"
+REPRODUCTION_BLAS_THREADS = 1
 MIB = 1024**2
 FLOAT32_BYTES = 4
 INITIAL_LOSS = 1.0
@@ -177,6 +180,9 @@ def model_assumptions() -> dict[str, Any]:
         "model_version": WORK_MODEL_VERSION,
         "work_model_annotation": WORK_MODEL_ANNOTATION,
         "work_model_env": WORK_MODEL_ENV,
+        "blas_threads_env": BLAS_THREADS_ENV,
+        "blas_threads_annotation": BLAS_THREADS_ANNOTATION,
+        "reproduction_blas_threads": REPRODUCTION_BLAS_THREADS,
         "initial_loss": INITIAL_LOSS,
         "convergence_threshold": CONVERGENCE_THRESHOLD,
         "min_step_budget": MIN_STEP_BUDGET,

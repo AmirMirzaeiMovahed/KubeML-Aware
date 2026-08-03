@@ -13,13 +13,13 @@ image build, registry push, server-side dry run, or live deployment.
 - Helm used for validation: `v4.2.0`
 - Offline Kubernetes schema target: `1.36.0`
 - Article plan lock: `experiments/locks/article-70.json`
-  - schema 1.1; 70 runs; 25 pacing + 45 main
+  - schema 1.2; 70 runs; 25 pacing + 45 main
   - canonical plan SHA-256:
-    `88554972be8629880dfea9073d8c0ed6515fe3ca918ef2a3bb0f3a7f3405becb`
+    `cbf086b483587d6659b149f2c1c2990b7ca27a2a85a8eaebaf92bb1cf0cc7c89`
 - Extended plan lock: `experiments/locks/extended-90.json`
-  - schema 1.1; 90 runs; 30 pacing + 60 main
+  - schema 1.2; 90 runs; 30 pacing + 60 main
   - canonical plan SHA-256:
-    `a031c66bbb8553d13b5c0d68a42bfba6e2eb25f87e544bab39089b0e5c115460`
+    `70dfe87e47c5fafc028401c7309844694eac9d5f6af0ae1171c9adcc91a7dde0`
 - Wheel: `dist/k8s_ai_scheduler-0.1.0-py3-none-any.whl`
   - file SHA-256:
     `39c3ed7c4566134e4c4d53afade5c6423e40f78f5ab4dea6f668eeac21de8017`
@@ -34,7 +34,7 @@ image build, registry push, server-side dry run, or live deployment.
 |---|---|
 | Exact dependency imports and `pip check` | Passed; no broken requirements |
 | Python compile check | Passed for scheduler, workload, trainer, results, simulation, and experiments |
-| Automated tests | **107 passed**, zero skipped/failing |
+| Automated tests | **112 passed**, zero skipped/failing |
 | PowerShell parser validation | Passed |
 | Bash `-n` validation | Passed |
 | Helm values JSON Schema | Passed |
@@ -67,6 +67,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 - `--execute` requires an explicit kubeconfig context and target node.
 - Trainer and live scheduler images must be digest-pinned.
+- The active Minikube profile must attest a running Docker driver and healthy
+  host, kubelet, API server, and kubeconfig state.
+- The exact trainer digest is prewarmed on the target node; its runtime image
+  ID and actual single-thread BLAS pools are content-addressed in the evidence.
+- Every registered run starts after a 30-second clean cooldown with at least
+  three workload-free, pressure-free, scheduler-continuity polls.
 - The expanded plan lock must already exist and match exactly.
 - The live Helm release must be deployed in dynamic reproduction mode.
 - The live Deployment must be Ready, single-replica, restart-free, use the

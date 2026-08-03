@@ -29,6 +29,9 @@ sys.path.append(str(ROOT))
 from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
 from workload.generate_workload import deterministic_job_seed  # noqa: E402
 from k8s.work_model import (  # noqa: E402
+    BLAS_THREADS_ANNOTATION,
+    BLAS_THREADS_ENV,
+    REPRODUCTION_BLAS_THREADS,
     WORK_MODEL_ANNOTATION,
     WORK_MODEL_ENV,
     WORK_MODEL_VERSION,
@@ -257,6 +260,18 @@ def _pod_contract_errors(pod: Any, expected: Mapping[str, Any]) -> List[str]:
             f"{WORK_MODEL_ENV}={getattr(model_version, 'value', None)!r} "
             f"expected={WORK_MODEL_VERSION!r}"
         )
+    blas_threads = env.get(BLAS_THREADS_ENV)
+    if getattr(blas_threads, "value", None) != str(REPRODUCTION_BLAS_THREADS):
+        errors.append(
+            f"{BLAS_THREADS_ENV}={getattr(blas_threads, 'value', None)!r} "
+            f"expected={REPRODUCTION_BLAS_THREADS!r}"
+        )
+    if annotations.get(BLAS_THREADS_ANNOTATION) != str(REPRODUCTION_BLAS_THREADS):
+        errors.append(
+            f"annotation {BLAS_THREADS_ANNOTATION}="
+            f"{annotations.get(BLAS_THREADS_ANNOTATION)!r} "
+            f"expected={REPRODUCTION_BLAS_THREADS!r}"
+        )
     for feature, annotation in FEATURE_ANNOTATIONS.items():
         item = env.get(f"JOB_{feature}")
         if getattr(item, "value", None) != annotations.get(annotation):
@@ -281,6 +296,12 @@ def _trainer_evidence_errors(
             f"annotation {WORK_MODEL_ANNOTATION}={annotation_version!r} "
             f"expected={WORK_MODEL_VERSION!r}"
         )
+    if annotations.get(BLAS_THREADS_ANNOTATION) != str(REPRODUCTION_BLAS_THREADS):
+        errors.append(
+            f"annotation {BLAS_THREADS_ANNOTATION}="
+            f"{annotations.get(BLAS_THREADS_ANNOTATION)!r} "
+            f"expected={REPRODUCTION_BLAS_THREADS!r}"
+        )
     if features is None:
         return errors
 
@@ -294,6 +315,24 @@ def _trainer_evidence_errors(
             errors.append("INITIALIZATION_COMPLETED work_model evidence missing")
         elif initialized_model.get("model_version") != WORK_MODEL_VERSION:
             errors.append("INITIALIZATION_COMPLETED work model version mismatch")
+        blas_runtime = initialization.get("blas_runtime")
+        blas_libraries = (
+            blas_runtime.get("libraries")
+            if isinstance(blas_runtime, Mapping)
+            else None
+        )
+        if (
+            not isinstance(blas_runtime, Mapping)
+            or blas_runtime.get("expected_threads") != REPRODUCTION_BLAS_THREADS
+            or not isinstance(blas_libraries, list)
+            or not blas_libraries
+            or any(
+                not isinstance(pool, Mapping)
+                or pool.get("num_threads") != REPRODUCTION_BLAS_THREADS
+                for pool in (blas_libraries or [])
+            )
+        ):
+            errors.append("INITIALIZATION_COMPLETED BLAS thread evidence is invalid")
     if completed is None:
         return errors
 
@@ -314,12 +353,20 @@ def _trainer_evidence_errors(
         "gradient_bytes": expected.gradient_bytes,
         "checkpoint_bytes": expected.checkpoint_bytes,
         "checkpoint_count": expected.checkpoint_count,
+        "blas_threads": REPRODUCTION_BLAS_THREADS,
     }
     for field, wanted in exact_contract.items():
         if completed.get(field) != wanted:
             errors.append(
                 f"EXECUTION_COMPLETED {field}={completed.get(field)!r} expected={wanted!r}"
             )
+    library_count = completed.get("blas_library_count")
+    if (
+        isinstance(library_count, bool)
+        or not isinstance(library_count, int)
+        or library_count <= 0
+    ):
+        errors.append("EXECUTION_COMPLETED blas_library_count must be > 0")
     for field in ("final_loss", "checkpoint_seconds", "duration_seconds"):
         value = completed.get(field)
         if (

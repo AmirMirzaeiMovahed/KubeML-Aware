@@ -1,9 +1,18 @@
-schema_version: "1.1"
+schema_version: "1.2"
 kind: ml-scheduler-experiment-plan
 description: >-
   Exact pre-registered paper reproduction matrix. The base plan contains
   70 clean Kubernetes runs: 25 pacing runs and 45 main-comparison runs.
   Enabling the adaptive extension adds 20 separately identified runs, for 90.
+
+execution_controls:
+  schema_version: "1.0"
+  trainer_image_prewarm: required-on-target-node
+  blas_threads: 1
+  cooldown_seconds: 30.0
+  cooldown_clean_polls: 3
+  cooldown_policy: fixed-window-clean-node-and-scheduler-continuity
+  minikube_driver: docker
 
 execution_order:
   strategy: deterministic-randomized-blocks

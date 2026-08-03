@@ -98,6 +98,11 @@ def test_submission_fails_closed_when_server_spread_is_too_wide(tmp_path: Path):
 def _snapshot() -> dict:
     return {
         "kubectl_context": "minikube",
+        "minikube": {
+            "profile": "minikube",
+            "driver": "docker",
+            "profile_status": "Running",
+        },
         "cluster_nodes": [{"name": "minikube", "uid": "node-uid"}],
         "target_node": {
             "name": "minikube",
