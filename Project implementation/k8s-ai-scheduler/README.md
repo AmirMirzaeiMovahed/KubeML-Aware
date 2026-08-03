@@ -137,6 +137,15 @@ labels are pre-registered in `experiments/scenarios.yaml` and documented in
 materializes, and—only with explicit `--execute`—runs the plan; see the server
 runbook before enabling execution.
 
+Cluster execution never applies a category-named manifest directory with
+`kubectl`. The runner submits every Pod through a seed-controlled concurrent
+Kubernetes API barrier, records the actual server creation timestamps, and
+rejects a burst whose creation spread exceeds the configured limit. The
+default `article-exact` environment profile also rejects multi-node, non-
+Minikube, non-4-CPU/8-GiB, pressured, or shared target nodes. Use
+`--environment-profile record-only` only for smoke tests; those results are
+explicitly ineligible for an article reproduction claim.
+
 Create and review the immutable plan locks locally:
 
 ```powershell

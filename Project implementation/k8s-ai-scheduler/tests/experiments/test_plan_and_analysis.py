@@ -136,6 +136,35 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                 "node_name": "node-a",
                 "error": None,
             })
+        submission = {
+            "schema_version": "1.0",
+            "mode": "concurrent-client-barrier",
+            "seed": spec.seed,
+            "expected_jobs": spec.jobs,
+            "worker_count": spec.jobs,
+            "configured_worker_ceiling": 64,
+            "burst_started_at": 0.0,
+            "burst_completed_at": 0.1,
+            "client_request_spread_seconds": 0.0,
+            "server_creation_spread_seconds": 0.0,
+            "max_creation_spread_seconds": 5.0,
+            "randomized_job_order": [job["job_id"] for job in jobs],
+            "jobs": [
+                {
+                    "submission_index": index,
+                    "job_id": job["job_id"],
+                    "client_requested_at": 0.0,
+                    "client_requested_offset_seconds": 0.0,
+                    "client_completed_at": 0.1,
+                    "client_duration_seconds": 0.1,
+                    "status": "created",
+                    "error": None,
+                    "uid": f"uid-{index}",
+                    "server_creation_timestamp": 0.0,
+                }
+                for index, job in enumerate(jobs)
+            ],
+        }
         document = make_result_document(
             run_id=spec.run_id,
             scenario=spec.scenario,
@@ -146,7 +175,7 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
             jobs=jobs,
             source="kubernetes",
             environment={
-                "orchestration": {
+                    "orchestration": {
                     "plan_sha256": plan_hash,
                     "target_node": "node-a",
                     "trainer_image": "registry.example/ml-sim@sha256:" + "a" * 64,
@@ -159,26 +188,28 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                             for job in jobs
                         },
                     },
-                    "cluster_snapshot_sha256": _canonical_sha256(
+                        "cluster_snapshot_sha256": _canonical_sha256(
                         {
                             "target_node": {"name": "node-a"},
                             "kubernetes_version": {},
                             "helm": {"version": "test"},
-                        }
-                    ),
-                },
+                            }
+                        ),
+                        "submission_sha256": _canonical_sha256(submission),
+                    },
                 "cluster_snapshot": {
                     "target_node": {"name": "node-a"},
                     "kubernetes_version": {},
                     "helm": {"version": "test"},
                 },
-                "kubernetes": {
+                    "kubernetes": {
                     "workload_pods": [
                         {"name": job["job_id"], "node_name": "node-a"}
                         for job in jobs
-                    ]
+                        ]
+                    },
+                    "submission": submission,
                 },
-            },
         )
         if spec.scheduler_name != "default-scheduler":
             events = []

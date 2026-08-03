@@ -26,6 +26,7 @@ published measurements have already been reproduced.
 | Descending rank order | reproduction scheduler | Implemented/local | Ordered schedule record; server pending |
 | Reversed-order ablation | `--reverse` | Implemented/local | Reversed rank order in a completed cluster run |
 | Brief burst collection interval | burst collector and `--quiet-period` | Implemented/local | Expected-count and timeout tests; server pending |
+| Category-neutral simultaneous submission | seeded concurrent API submitter with one worker per Pod | Implemented/local | Submission order, UID/timestamps and API-server creation spread are embedded and strictly validated |
 | Priority queue behavior | deterministic sorted burst | Implemented/local | Complete order contains every expected Pod once |
 | Manual Pod binding | reproduction scheduler | Server pending | RBAC `create pods/binding`, successful API record, Pod node assignment |
 | Single-node placement | explicit `--target-node` | Server pending | Ready/uncordoned target-node preflight |
@@ -51,8 +52,8 @@ published measurements have already been reproduced.
 
 | Article requirement | Concrete matrix/implementation | Status |
 |---|---|---|
-| Single-node Minikube, 4 CPU, 8 GiB | runbook target profile | Server pending |
-| Clean isolated runs | unique `ml.scheduler/run-id`; scoped cleanup | Server pending |
+| Single-node Minikube, 4 CPU, 8 GiB | fail-closed `article-exact` environment policy | Implemented/local; server pending |
+| Clean isolated runs | target-node inventory rejects every active non-system/non-scheduler Pod before each run | Implemented/local; server pending |
 | Identical default/custom workload | deterministic paired generation | Implemented/local; server pairing pending |
 | 12 jobs normal | `12-normal` | Server pending |
 | 48 jobs normal | `48-normal` | Server pending |

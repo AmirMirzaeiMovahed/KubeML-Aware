@@ -43,6 +43,14 @@ from experiments.schema import (  # noqa: E402
     IncompleteRunError,
     validate_result_document,
 )
+from experiments.environment import (  # noqa: E402
+    ArticleEnvironmentError,
+    validate_article_environment,
+)
+from experiments.submission import (  # noqa: E402
+    BurstSubmissionError,
+    submit_burst,
+)
 from results.metrics_collector import collect  # noqa: E402
 
 
@@ -658,6 +666,11 @@ def capture_cluster_environment(
 ) -> Dict[str, Any]:
     version = kubectl.json("version", timeout=30)
     node = kubectl.json("get", "node", target_node, timeout=30)
+    nodes = kubectl.json("get", "nodes", timeout=30)
+    target_node_pods = kubectl.json(
+        "get", "pods", "-A", "--field-selector", f"spec.nodeName={target_node}",
+        timeout=30,
+    )
     scheduler_pods = kubectl.pod_json(namespace, scheduler_selector)
     pod_inventory = []
     for pod in scheduler_pods.get("items") or []:
@@ -682,16 +695,36 @@ def capture_cluster_environment(
             ],
         })
     node_status = node.get("status") or {}
+    target_inventory = [
+        {
+            "namespace": (pod.get("metadata") or {}).get("namespace"),
+            "name": (pod.get("metadata") or {}).get("name"),
+            "uid": (pod.get("metadata") or {}).get("uid"),
+            "phase": (pod.get("status") or {}).get("phase"),
+            "labels": (pod.get("metadata") or {}).get("labels") or {},
+        }
+        for pod in (target_node_pods.get("items") or [])
+    ]
     return {
         "kubectl_context": kubectl.context,
         "namespace": namespace,
         "kubernetes_version": version,
+        "cluster_nodes": [
+            {
+                "name": (item.get("metadata") or {}).get("name"),
+                "uid": (item.get("metadata") or {}).get("uid"),
+            }
+            for item in (nodes.get("items") or [])
+        ],
+        "target_node_pods": target_inventory,
         "target_node": {
             "name": (node.get("metadata") or {}).get("name"),
             "uid": (node.get("metadata") or {}).get("uid"),
+            "labels": (node.get("metadata") or {}).get("labels") or {},
             "capacity": node_status.get("capacity") or {},
             "allocatable": node_status.get("allocatable") or {},
             "node_info": node_status.get("nodeInfo") or {},
+            "conditions": node_status.get("conditions") or [],
         },
         "scheduler_deployment": {
             "name": (deployment.get("metadata") or {}).get("name"),
@@ -1037,8 +1070,10 @@ def _attach_execution_evidence(
     scheduler_deployment: str,
     target_node: str,
     kube_context: str,
+    submission_evidence: Mapping[str, Any],
 ) -> None:
-    document.setdefault("environment", {})["orchestration"] = {
+    environment = document.setdefault("environment", {})
+    environment["orchestration"] = {
         "plan_sha256": plan_sha256,
         "kubectl_context": kube_context,
         "trainer_image": trainer_image,
@@ -1047,8 +1082,10 @@ def _attach_execution_evidence(
         "target_node": target_node,
         "artifact_sha256": artifact_hashes(manifest_directory.parent),
         "cluster_snapshot_sha256": _canonical_sha256(cluster_environment),
+        "submission_sha256": _canonical_sha256(submission_evidence),
     }
-    document["environment"]["cluster_snapshot"] = dict(cluster_environment)
+    environment["cluster_snapshot"] = dict(cluster_environment)
+    environment["submission"] = dict(submission_evidence)
 
 
 def validate_result_for_spec(
@@ -1057,6 +1094,7 @@ def validate_result_for_spec(
     *,
     plan_sha256: str,
     target_node: str,
+    require_article_environment: bool = False,
 ) -> None:
     validate_result_document(document, strict=True)
     run = document.get("run") or {}
@@ -1116,6 +1154,77 @@ def validate_result_for_spec(
         helm_snapshot = snapshot.get("helm")
         if not isinstance(helm_snapshot, Mapping) or not helm_snapshot.get("version"):
             mismatches["helm"] = (helm_snapshot, "captured Helm release metadata")
+        policy = snapshot.get("reproduction_policy")
+        if require_article_environment and (
+            not isinstance(policy, Mapping)
+            or policy.get("profile") != "article-exact"
+            or policy.get("article_claim_eligible") is not True
+            or policy.get("errors") != []
+        ):
+            mismatches["reproduction_policy"] = (
+                policy, "eligible article-exact policy"
+            )
+
+    submission = environment.get("submission")
+    if not isinstance(submission, Mapping):
+        mismatches["submission"] = (submission, "object")
+    else:
+        expected_job_ids = {
+            str(job.get("job_id")) for job in (document.get("jobs") or [])
+        }
+        submission_rows = submission.get("jobs") or []
+        submitted_job_ids = {
+            str(row.get("job_id"))
+            for row in submission_rows
+            if isinstance(row, Mapping) and row.get("status") == "created"
+        }
+        if (
+            submission.get("mode") != "concurrent-client-barrier"
+            or submission.get("seed") != spec.seed
+            or submission.get("expected_jobs") != spec.jobs
+            or len(submission_rows) != spec.jobs
+            or submitted_job_ids != expected_job_ids
+        ):
+            mismatches["submission.contract"] = (
+                submission, "complete concurrent submission matching RunSpec"
+            )
+        spread = submission.get("server_creation_spread_seconds")
+        spread_limit = submission.get("max_creation_spread_seconds")
+        if (
+            isinstance(spread, bool)
+            or not isinstance(spread, (int, float))
+            or isinstance(spread_limit, bool)
+            or not isinstance(spread_limit, (int, float))
+            or not 0 <= float(spread) <= float(spread_limit)
+        ):
+            mismatches["submission.server_creation_spread_seconds"] = (
+                spread, f"finite value within {spread_limit!r}"
+            )
+        submitted_at = {
+            str(row.get("job_id")): row.get("server_creation_timestamp")
+            for row in submission_rows
+            if isinstance(row, Mapping)
+        }
+        for job in document.get("jobs") or []:
+            job_id = str(job.get("job_id"))
+            observed = job.get("submission_time")
+            expected = submitted_at.get(job_id)
+            if (
+                isinstance(expected, bool)
+                or not isinstance(expected, (int, float))
+                or isinstance(observed, bool)
+                or not isinstance(observed, (int, float))
+                or not math.isclose(
+                    float(observed), float(expected), rel_tol=0.0, abs_tol=1e-6
+                )
+            ):
+                mismatches[f"submission.timestamp.{job_id}"] = (observed, expected)
+        submission_digest = orchestration.get("submission_sha256")
+        expected_digest = _canonical_sha256(submission)
+        if submission_digest != expected_digest:
+            mismatches["submission_sha256"] = (
+                submission_digest, expected_digest
+            )
     kubernetes_environment = environment.get("kubernetes")
     workload_pods = (
         kubernetes_environment.get("workload_pods")
@@ -1164,6 +1273,8 @@ def execute_run(
     target_node: str,
     plan_sha256: str,
     cluster_environment: Mapping[str, Any],
+    submit_manifest_directory: Callable[[Path, RunSpec], Mapping[str, Any]],
+    require_article_environment: bool,
 ) -> Dict[str, Any]:
     selector = f"ml.scheduler/run-id={spec.run_id}"
     scheduler_pods = (
@@ -1175,8 +1286,9 @@ def execute_run(
     existing = kubectl.pod_json(namespace, selector).get("items", [])
     if existing:
         raise ClusterRunError(f"run selector already exists before apply: {selector}")
+    submission_evidence: Optional[Mapping[str, Any]] = None
     try:
-        kubectl.run("apply", "-f", str(manifest_directory), timeout=120)
+        submission_evidence = submit_manifest_directory(manifest_directory, spec)
         _wait_for_terminal_pods(
             kubectl,
             spec,
@@ -1226,6 +1338,7 @@ def execute_run(
                 scheduler_deployment=scheduler_deployment,
                 target_node=target_node,
                 kube_context=kube_context,
+                submission_evidence=submission_evidence,
             )
             _atomic_json(results_root / "failed" / f"{spec.run_id}.json", document)
             raise
@@ -1239,6 +1352,7 @@ def execute_run(
             scheduler_deployment=scheduler_deployment,
             target_node=target_node,
             kube_context=kube_context,
+            submission_evidence=submission_evidence,
         )
         if spec.scheduler_name != "default-scheduler":
             schedule = read_scheduler_record(
@@ -1259,11 +1373,14 @@ def execute_run(
             spec,
             plan_sha256=plan_sha256,
             target_node=target_node,
+            require_article_environment=require_article_environment,
         )
         _atomic_json(results_root / "runs" / f"{spec.run_id}.json", document)
         _cleanup_run(kubectl, spec, namespace=namespace, timeout_seconds=120)
         return document
     except Exception as exc:
+        if submission_evidence is None and isinstance(exc, BurstSubmissionError):
+            submission_evidence = exc.evidence
         failed_path = results_root / "failed" / f"{spec.run_id}.json"
         if not failed_path.exists():
             try:
@@ -1285,17 +1402,19 @@ def execute_run(
                         image_pull_secrets=image_pull_secrets,
                     ),
                 )
-                _attach_execution_evidence(
-                    partial,
-                    plan_sha256=plan_sha256,
-                    cluster_environment=cluster_environment,
-                    manifest_directory=manifest_directory,
-                    trainer_image=trainer_image,
-                    image_pull_secrets=image_pull_secrets,
-                    scheduler_deployment=scheduler_deployment,
-                    target_node=target_node,
-                    kube_context=kube_context,
-                )
+                if submission_evidence is not None:
+                    _attach_execution_evidence(
+                        partial,
+                        plan_sha256=plan_sha256,
+                        cluster_environment=cluster_environment,
+                        manifest_directory=manifest_directory,
+                        trainer_image=trainer_image,
+                        image_pull_secrets=image_pull_secrets,
+                        scheduler_deployment=scheduler_deployment,
+                        target_node=target_node,
+                        kube_context=kube_context,
+                        submission_evidence=submission_evidence,
+                    )
                 partial["run"]["status"] = "failed"
                 partial["failures"].append({
                     "code": "ORCHESTRATION_FAILED",
@@ -1322,6 +1441,48 @@ def _select_specs(specs: Sequence[RunSpec], start_at: Optional[str], limit: Opti
             raise ValueError("--limit must be > 0")
         selected = selected[:limit]
     return selected
+
+
+def build_burst_submitter(
+    *,
+    kube_context: str,
+    namespace: str,
+    worker_ceiling: int,
+    max_creation_spread_seconds: float,
+) -> tuple[Callable[[Path, RunSpec], Mapping[str, Any]], Any]:
+    """Build one pooled Kubernetes API client for all registered bursts."""
+
+    from kubernetes import client, config as kubernetes_config
+
+    configuration = client.Configuration()
+    kubernetes_config.load_kube_config(
+        context=kube_context, client_configuration=configuration
+    )
+    configuration.connection_pool_maxsize = max(
+        int(configuration.connection_pool_maxsize or 0), worker_ceiling
+    )
+    api_client = client.ApiClient(configuration=configuration)
+    core_api = client.CoreV1Api(api_client)
+
+    def create_pod(pod_namespace: str, body: Mapping[str, Any]) -> Any:
+        return core_api.create_namespaced_pod(
+            pod_namespace,
+            body,
+            _request_timeout=(10, 120),
+        )
+
+    def submit(directory: Path, spec: RunSpec) -> Mapping[str, Any]:
+        return submit_burst(
+            directory,
+            expected_namespace=namespace,
+            expected_count=spec.jobs,
+            seed=spec.seed,
+            create_pod=create_pod,
+            max_workers=worker_ceiling,
+            max_creation_spread_seconds=max_creation_spread_seconds,
+        )
+
+    return submit, api_client
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
@@ -1355,6 +1516,24 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     )
     parser.add_argument("--timeout-seconds", type=float, default=3600.0)
     parser.add_argument("--poll-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--environment-profile",
+        choices=("article-exact", "record-only"),
+        default="article-exact",
+        help="fail closed on the published environment or explicitly run an ineligible smoke test",
+    )
+    parser.add_argument(
+        "--submission-workers",
+        type=int,
+        default=64,
+        help="Kubernetes API connection/worker ceiling; must cover the largest burst",
+    )
+    parser.add_argument(
+        "--max-submission-spread-seconds",
+        type=float,
+        default=5.0,
+        help="reject a run when API-server Pod creation spans longer than this",
+    )
     parser.add_argument("--cleanup-on-failure", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--start-at", default=None)
@@ -1363,6 +1542,13 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     if args.timeout_seconds <= 0 or args.poll_seconds <= 0:
         parser.error("timeouts and polling interval must be > 0")
+    if args.submission_workers <= 0:
+        parser.error("--submission-workers must be > 0")
+    if (
+        not math.isfinite(args.max_submission_spread_seconds)
+        or args.max_submission_spread_seconds <= 0
+    ):
+        parser.error("--max-submission-spread-seconds must be finite and > 0")
     if "{run_id}" not in args.scheduler_results_template:
         parser.error("--scheduler-results-template must contain {run_id}")
     if args.execute and not args.context:
@@ -1384,6 +1570,8 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         args.plan_out, expanded_plan, require_existing=args.execute
     )
     selected = _select_specs(specs, args.start_at, args.limit)
+    if args.execute and args.submission_workers < max(spec.jobs for spec in selected):
+        parser.error("--submission-workers must be at least the largest selected burst")
     print(f"Validated {len(specs)}-run plan; selected {len(selected)} runs")
 
     if args.materialize and not args.execute:
@@ -1436,6 +1624,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         target_node=args.target_node,
         require_metrics=args.include_adaptive,
     )
+    _ensure_clean_cluster(kubectl, args.namespace)
     cluster_environment = capture_cluster_environment(
         kubectl,
         namespace=args.namespace,
@@ -1444,6 +1633,21 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         scheduler_selector="app.kubernetes.io/component=scheduler",
     )
     cluster_environment["helm"] = helm_environment
+    try:
+        cluster_environment["reproduction_policy"] = validate_article_environment(
+            cluster_environment,
+            experiment_namespace=args.namespace,
+            profile=args.environment_profile,
+        )
+    except ArticleEnvironmentError as exc:
+        cluster_environment["reproduction_policy"] = exc.evidence
+        cluster_environment["plan_sha256"] = expanded_plan["plan_sha256"]
+        cluster_environment["trainer_image"] = args.image
+        _atomic_json(
+            args.results_dir / "environment" / "cluster-rejected.json",
+            cluster_environment,
+        )
+        raise
     scheduler_pods = (
         (cluster_environment.get("scheduler_deployment") or {}).get("pods") or []
     )
@@ -1485,7 +1689,12 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     cluster_environment["plan_sha256"] = expanded_plan["plan_sha256"]
     cluster_environment["trainer_image"] = args.image
     _atomic_json(args.results_dir / "environment" / "cluster.json", cluster_environment)
-    _ensure_clean_cluster(kubectl, args.namespace)
+    submit_manifest_directory, api_client = build_burst_submitter(
+        kube_context=args.context,
+        namespace=args.namespace,
+        worker_ceiling=args.submission_workers,
+        max_creation_spread_seconds=args.max_submission_spread_seconds,
+    )
     completed = 0
     for spec in selected:
         result_path = args.results_dir / "runs" / f"{spec.run_id}.json"
@@ -1496,6 +1705,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                 spec,
                 plan_sha256=expanded_plan["plan_sha256"],
                 target_node=args.target_node,
+                require_article_environment=(
+                    args.environment_profile == "article-exact"
+                ),
             )
             print(f"[{spec.sequence}/{len(specs)}] resume: already complete {spec.run_id}")
             completed += 1
@@ -1509,6 +1721,22 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             scheduling_gate=args.scheduling_gate,
             image_pull_secrets=args.image_pull_secret,
         )
+        _ensure_clean_cluster(kubectl, args.namespace)
+        run_environment = capture_cluster_environment(
+            kubectl,
+            namespace=args.namespace,
+            target_node=args.target_node,
+            deployment=deployment,
+            scheduler_selector="app.kubernetes.io/component=scheduler",
+        )
+        run_environment["helm"] = helm_environment
+        run_environment["reproduction_policy"] = validate_article_environment(
+            run_environment,
+            experiment_namespace=args.namespace,
+            profile=args.environment_profile,
+        )
+        run_environment["plan_sha256"] = expanded_plan["plan_sha256"]
+        run_environment["trainer_image"] = args.image
         print(f"[{spec.sequence}/{len(specs)}] running {spec.run_id}")
         execute_run(
             spec,
@@ -1527,9 +1755,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             scheduler_results_template=args.scheduler_results_template,
             target_node=args.target_node,
             plan_sha256=expanded_plan["plan_sha256"],
-            cluster_environment=cluster_environment,
+            cluster_environment=run_environment,
+            submit_manifest_directory=submit_manifest_directory,
+            require_article_environment=(
+                args.environment_profile == "article-exact"
+            ),
         )
         completed += 1
+    api_client.close()
     print(f"Completed and strictly collected {completed} selected runs")
     return 0
 

@@ -448,6 +448,15 @@ Run in randomized block order while retaining deterministic workload pairing.
 Never execute two experimental runs concurrently on the same reproduction
 node.
 
+The runner itself submits each workload as a seed-controlled concurrent API
+burst. Keep the default `--environment-profile article-exact`: it validates a
+single Minikube node, four CPU cores, approximately 8 GiB memory, healthy node
+conditions, and the absence of active non-system workloads before every run.
+`--environment-profile record-only` is reserved for development smoke tests
+and makes the resulting evidence ineligible for article claims. A run also
+fails when its API-server Pod creation spread exceeds five seconds; tighten
+`--max-submission-spread-seconds` only after observing a stable pilot.
+
 **Article-only matrix: 70 runs**
 
 | Block | Scenarios | Configurations | Repetitions | Runs |
