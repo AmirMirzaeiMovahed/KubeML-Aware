@@ -1,10 +1,9 @@
 """Calibratable single-node proxy simulator for scheduler experiments.
 
 This remains a proxy, not a substitute for Kubernetes measurements.  Its work
-model now mirrors ``k8s/train.py``: convergence determines executed steps,
-matrix dimension controls cubic matmul cost, partitions repeat matmul and add
-synchronization delay, and checkpoint interval contributes I/O delay.  ``T``
-can be blended in during calibration but is not the default termination model.
+model delegates step, gradient, partition and checkpoint semantics to the same
+versioned module as ``k8s/train.py`` and workload generation.  Hardware scales
+can be calibrated, while ``T`` is only blended in when explicitly requested.
 """
 
 from __future__ import annotations
@@ -17,6 +16,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from k8s.work_model import (  # noqa: E402
+    CONVERGENCE_THRESHOLD,
+    WORK_MODEL_VERSION,
+    estimate_work,
+)
 from scheduler.rank import JobFeatures, compute_ranks, sort_by_rank  # noqa: E402
 
 
@@ -24,17 +28,25 @@ from scheduler.rank import JobFeatures, compute_ranks, sort_by_rank  # noqa: E40
 class TrainerWorkModel:
     """Hardware calibration parameters for the trainer-derived proxy."""
 
+    model_version: str = WORK_MODEL_VERSION
     matrix_reference: float = 128.0
     matmul_seconds_at_reference: float = 0.0001
+    gradient_scale: float = 1.0
     synchronization_scale: float = 1.0
     checkpoint_scale: float = 1.0
     estimated_time_weight: float = 0.0
     convergence_threshold: float = 0.02
 
     def validate(self) -> None:
+        if self.model_version != WORK_MODEL_VERSION:
+            raise ValueError(
+                f"model_version must be {WORK_MODEL_VERSION!r}; "
+                f"got {self.model_version!r}"
+            )
         for name in (
             "matrix_reference",
             "matmul_seconds_at_reference",
+            "gradient_scale",
             "synchronization_scale",
             "checkpoint_scale",
             "convergence_threshold",
@@ -71,12 +83,17 @@ class SimResult:
         return self.completion_t - self.submission_t
 
 
-def trainer_step_count(job: JobFeatures, threshold: float = 0.02) -> int:
-    if not math.isfinite(job.R) or job.R <= 0:
-        raise ValueError(f"job {job.job_id}: R must be finite and > 0")
-    maximum = max(20, int((job.M / 32.0) * (1.0 + job.G / 10.0)))
-    convergence_steps = math.floor(math.log(threshold) / -job.R) + 1
-    return min(maximum, convergence_steps)
+def trainer_step_count(
+    job: JobFeatures, threshold: float = CONVERGENCE_THRESHOLD
+) -> int:
+    return estimate_work(
+        R=job.R,
+        M=int(job.M),
+        G=job.G,
+        C=int(job.C),
+        P=int(job.P),
+        threshold=threshold,
+    ).planned_steps
 
 
 def estimate_trainer_work(job: JobFeatures, model: TrainerWorkModel = DEFAULT_WORK_MODEL) -> float:
@@ -89,22 +106,23 @@ def estimate_trainer_work(job: JobFeatures, model: TrainerWorkModel = DEFAULT_WO
     for count_name in ("M", "C", "P"):
         if int(getattr(job, count_name)) != getattr(job, count_name):
             raise ValueError(f"job {job.job_id}: {count_name} must be an integer")
-    steps = trainer_step_count(job, model.convergence_threshold)
-    partitions = int(job.P)
+    estimate = estimate_work(
+        R=job.R,
+        M=int(job.M),
+        G=job.G,
+        C=int(job.C),
+        P=int(job.P),
+        threshold=model.convergence_threshold,
+    )
     matmul = (
-        steps
-        * partitions
+        estimate.planned_steps
         * model.matmul_seconds_at_reference
         * (job.M / model.matrix_reference) ** 3
     )
-    synchronization = (
-        steps * partitions * 0.001 * partitions * model.synchronization_scale
-        if partitions > 1
-        else 0.0
-    )
-    checkpoints = math.floor(steps / max(1, int(job.C)))
-    checkpoint = checkpoints * 0.002 * job.M / 100.0 * model.checkpoint_scale
-    trainer_estimate = matmul + synchronization + checkpoint
+    gradient = estimate.gradient_update_seconds * model.gradient_scale
+    synchronization = estimate.partition_sync_seconds * model.synchronization_scale
+    checkpoint = estimate.checkpoint_seconds * model.checkpoint_scale
+    trainer_estimate = matmul + gradient + synchronization + checkpoint
     blended = (
         (1.0 - model.estimated_time_weight) * trainer_estimate
         + model.estimated_time_weight * job.T

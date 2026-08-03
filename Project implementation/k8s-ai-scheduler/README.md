@@ -91,6 +91,14 @@ python -m sim.plot_results --results-dir artifacts/sim
 The simulator validates ranking and analysis logic but does not prove
 Kubernetes behavior or reproduce the article's wall-clock measurements.
 
+Workload generation, the trainer, collection validation, and the simulator
+share the versioned model in `k8s/work_model.py`. `T` is derived from
+`R/M/G/C/P`; the trainer performs matrix work over disjoint row partitions,
+updates a real `G`-MiB gradient buffer, copies it for partition synchronization,
+and writes plus `fsync`s bounded checkpoints every `C` steps. Every Pod and
+terminal log records the model version, and strict collection rejects stale or
+incomplete work-model evidence.
+
 ## Kubernetes packaging
 
 The Helm chart includes:

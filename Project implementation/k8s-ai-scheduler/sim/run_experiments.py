@@ -401,6 +401,7 @@ def _parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--max-time", type=float, default=100000.0)
     parser.add_argument("--matrix-reference", type=float, default=128.0)
     parser.add_argument("--matmul-seconds-at-reference", type=float, default=0.0001)
+    parser.add_argument("--gradient-scale", type=float, default=1.0)
     parser.add_argument("--synchronization-scale", type=float, default=1.0)
     parser.add_argument("--checkpoint-scale", type=float, default=1.0)
     parser.add_argument("--estimated-time-weight", type=float, default=0.0)
@@ -416,6 +417,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     work_model = TrainerWorkModel(
         matrix_reference=args.matrix_reference,
         matmul_seconds_at_reference=args.matmul_seconds_at_reference,
+        gradient_scale=args.gradient_scale,
         synchronization_scale=args.synchronization_scale,
         checkpoint_scale=args.checkpoint_scale,
         estimated_time_weight=args.estimated_time_weight,

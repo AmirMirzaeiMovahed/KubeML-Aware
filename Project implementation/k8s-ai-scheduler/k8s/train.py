@@ -20,7 +20,20 @@ import signal
 import sys
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+from k8s.work_model import (
+    CONVERGENCE_THRESHOLD,
+    INITIAL_LOSS,
+    PARTITION_SYNC_LATENCY_SECONDS,
+    WORK_MODEL_ENV,
+    WORK_MODEL_VERSION,
+    estimate_work,
+    partition_row_ranges,
+    step_budget,
+    validate_characteristics,
+)
 
 
 # NumPy/BLAS reads these variables during import.  Force a reproducible default
@@ -43,8 +56,9 @@ os.environ["OMP_DYNAMIC"] = "FALSE"
 import numpy as np  # noqa: E402  (must follow BLAS environment setup)
 
 
-CONVERGENCE_THRESHOLD = 0.02
 MAX_MATRIX_DIMENSION = 4096
+MAX_GRADIENT_MIB = 256.0
+MAX_PARTITIONS = 64
 _shutdown_signal: Optional[int] = None
 
 
@@ -105,21 +119,57 @@ def load_config() -> TrainingConfig:
     if not job_id or len(job_id) > 253:
         raise ValueError("JOB_ID must contain 1..253 characters")
     default_seed = _stable_seed(job_id)
-    return TrainingConfig(
+    model_version = os.environ.get(WORK_MODEL_ENV, WORK_MODEL_VERSION)
+    if model_version != WORK_MODEL_VERSION:
+        raise ValueError(
+            f"{WORK_MODEL_ENV}={model_version!r} does not match trainer "
+            f"model {WORK_MODEL_VERSION!r}"
+        )
+    config = TrainingConfig(
         job_id=job_id,
         seed=_read_int("JOB_SEED", default_seed, minimum=0, maximum=2**63 - 1),
         # T is an estimate used by ranking; as in the article it does not stop training.
         T=_read_float("JOB_T", 10.0, minimum=0.000001, maximum=86400.0),
         R=_read_float("JOB_R", 0.05, minimum=0.000001, maximum=10.0),
         M=_read_int("JOB_M", 128, minimum=1, maximum=MAX_MATRIX_DIMENSION),
-        G=_read_float("JOB_G", 5.0, minimum=0.000001, maximum=100000.0),
+        G=_read_float("JOB_G", 5.0, minimum=0.000001, maximum=MAX_GRADIENT_MIB),
         C=_read_int("JOB_C", 50, minimum=1, maximum=10_000_000),
-        P=_read_int("JOB_P", 1, minimum=1, maximum=1024),
+        P=_read_int("JOB_P", 1, minimum=1, maximum=MAX_PARTITIONS),
     )
+    validate_characteristics(
+        R=config.R, M=config.M, G=config.G, C=config.C, P=config.P
+    )
+    return config
 
 
 def compute_max_steps(config: TrainingConfig) -> int:
-    return max(20, int((config.M / 32.0) * (1.0 + config.G / 10.0)))
+    return step_budget(config.M, config.G)
+
+
+def _checkpoint_path(job_id: str) -> Path:
+    root = Path(os.environ.get("ML_CHECKPOINT_DIR", "/tmp"))
+    digest = hashlib.sha256(job_id.encode("utf-8")).hexdigest()[:16]
+    return root / f"ml-checkpoint-{digest}.bin"
+
+
+def _write_checkpoint(path: Path, matrix: np.ndarray, payload_bytes: int) -> float:
+    """Write and fsync a bounded model-state payload, returning wall duration."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = memoryview(matrix).cast("B")
+    if not payload:
+        raise ValueError("checkpoint source matrix is empty")
+    started = time.perf_counter()
+    with path.open("wb", buffering=0) as checkpoint:
+        remaining = payload_bytes
+        while remaining:
+            chunk = payload[: min(remaining, len(payload))]
+            written = checkpoint.write(chunk)
+            if written <= 0:
+                raise OSError("checkpoint write made no progress")
+            remaining -= written
+        os.fsync(checkpoint.fileno())
+    return time.perf_counter() - started
 
 
 def _handle_signal(signum: int, _frame: Any) -> None:
@@ -128,47 +178,72 @@ def _handle_signal(signum: int, _frame: Any) -> None:
 
 
 def run_training(config: TrainingConfig) -> Dict[str, Any]:
-    """Allocate deterministic matrices and execute the article workload."""
+    """Execute physical compute, gradient, synchronization and checkpoint work."""
     global _shutdown_signal
     _shutdown_signal = None
     rng = np.random.default_rng(config.seed)
     a = rng.random((config.M, config.M), dtype=np.float32)
     b = rng.random((config.M, config.M), dtype=np.float32)
-    max_steps = compute_max_steps(config)
-    loss = 1.0
+    result_matrix = np.empty_like(a)
+    model = estimate_work(
+        R=config.R, M=config.M, G=config.G, C=config.C, P=config.P
+    )
+    gradient_elements = model.gradient_bytes // np.dtype(np.float32).itemsize
+    gradient = rng.random(gradient_elements, dtype=np.float32)
+    synchronization_buffer = np.empty_like(gradient) if config.P > 1 else None
+    partitions = partition_row_ranges(config.M, config.P)
+    checkpoint_path = _checkpoint_path(config.job_id)
+    loss = INITIAL_LOSS
 
     emit_event(
         "INITIALIZATION_COMPLETED",
         job_id=config.job_id,
         seed=config.seed,
         matrix_shape=[config.M, config.M],
-        max_steps=max_steps,
+        work_model=model.to_dict(),
+        estimated_T=config.T,
+        estimated_T_error_seconds=config.T - model.estimated_training_seconds,
+        partition_rows=[list(item) for item in partitions],
         blas_threads=int(_THREADS),
     )
     started_at = time.time()
     emit_event("EXECUTION_STARTED", timestamp=started_at, job_id=config.job_id)
 
     step = 0
-    while step < max_steps:
+    checkpoint_count = 0
+    checkpoint_seconds = 0.0
+    while step < model.step_budget:
         if _shutdown_signal is not None:
             raise InterruptedError(f"received signal {_shutdown_signal}")
-        for _ in range(config.P):
-            _ = a @ b
-            if config.P > 1:
-                time.sleep(0.001 * config.P)
+        for start, end in partitions:
+            np.matmul(a[start:end], b, out=result_matrix[start:end])
+
+        np.add(gradient, np.float32(config.R * 1e-4), out=gradient)
+        if synchronization_buffer is not None:
+            # P partitions imply P-1 peer synchronizations.  Copying G MiB for
+            # each peer makes both G and P observable physical work instead of
+            # merely multiplying a sleep constant.
+            for _peer in range(config.P - 1):
+                np.copyto(synchronization_buffer, gradient)
+            time.sleep(PARTITION_SYNC_LATENCY_SECONDS * (config.P - 1))
 
         loss *= math.exp(-config.R)
         step += 1
 
         if step % config.C == 0:
-            io_delay = 0.002 * config.M / 100.0
-            time.sleep(io_delay)
+            io_duration = _write_checkpoint(
+                checkpoint_path, result_matrix, model.checkpoint_bytes
+            )
+            checkpoint_count += 1
+            checkpoint_seconds += io_duration
             emit_event(
                 "CHECKPOINT",
                 job_id=config.job_id,
                 step=step,
                 loss=loss,
-                simulated_io_seconds=io_delay,
+                bytes_written=model.checkpoint_bytes,
+                io_seconds=io_duration,
+                path=str(checkpoint_path),
             )
 
         if loss < CONVERGENCE_THRESHOLD:
@@ -176,10 +251,19 @@ def run_training(config: TrainingConfig) -> Dict[str, Any]:
             break
 
     completed_at = time.time()
+    termination_reason = "converged" if loss < CONVERGENCE_THRESHOLD else "max_steps"
     result = {
         "job_id": config.job_id,
         "steps": step,
         "final_loss": loss,
+        "termination_reason": termination_reason,
+        "work_model_version": WORK_MODEL_VERSION,
+        "step_budget": model.step_budget,
+        "convergence_steps": model.convergence_steps,
+        "gradient_bytes": model.gradient_bytes,
+        "checkpoint_bytes": model.checkpoint_bytes,
+        "checkpoint_count": checkpoint_count,
+        "checkpoint_seconds": checkpoint_seconds,
         "duration_seconds": completed_at - started_at,
     }
     emit_event("EXECUTION_COMPLETED", timestamp=completed_at, **result)

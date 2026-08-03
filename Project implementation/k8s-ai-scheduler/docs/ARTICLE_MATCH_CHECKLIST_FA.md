@@ -38,12 +38,12 @@
 | [?] | توزیع دقیق ویژگی‌های هر گروه | مقاله پارامتر کامل منتشر نکرده؛ ranges/weights پروژه در `jobs.json` ثبت می‌شود | باید به‌عنوان assumption گزارش شود |
 | [x] | Matrix multiplication | Trainer با NumPy/BLAS و seed قطعی اجرا می‌کند | unit test؛ عملکرد واقعی Server pending |
 | [x] | کاهش نمایی Loss با `R` | `loss *= exp(-R)` | تست Trainer |
-| [!] | Checkpoint interval `C` | تأخیر I/O شبیه‌سازی می‌شود، فایل checkpoint پایدار نوشته نمی‌شود | انحراف باید در گزارش ذکر شود |
-| [!] | Partition count `P` | تکرار compute و synchronization delay مصنوعی است، distributed training واقعی نیست | انحراف باید در گزارش ذکر شود |
-| [x] | `T` تخمین زمان است | در Rank استفاده می‌شود و شرط توقف Trainer نیست | رفتار مستند و تست‌شده |
+| [x] | Checkpoint interval `C` | هر `C` گام یک payload محدود روی دیسک نوشته و `fsync` می‌شود | تست اندازه فایل و شمارش checkpoint |
+| [x] | Partition count `P` | ردیف‌های ماتریس بدون هم‌پوشانی تقسیم و برای هر peer بافر `G` کپی می‌شود | تست پوشش ردیف‌ها؛ همچنان proxy تک‌نودی است |
+| [x] | `T` تخمین مشتق‌شده است | از `R/M/G/C/P` و مدل نسخه‌دار ساخته می‌شود و شرط توقف Trainer نیست | مدل مشترک Generator/Trainer/Simulator و شاهد log |
 | [x] | سناریوی 12 Job با load عادی | `12-normal` | 5 repetition در Plan |
 | [x] | سناریوی 48 Job با load عادی | `48-normal` | 5 repetition در Plan |
-| [x] | سناریوی 48 Job با half load | `48-half`؛ فقط `M` نصف می‌شود | تست paired feature |
+| [x] | سناریوی 48 Job با half load | `48-half`؛ `M` نصف و `T` از مدل کار دوباره محاسبه می‌شود | تست paired feature و `T` مشتق‌شده |
 | [?] | تعریف دقیق half load | مقاله همه scalingها را روشن نکرده؛ فرض «فقط M» در Plan و خروجی ثبت شده است | باید assumption گزارش شود |
 | [x] | workload یکسان بین default/custom | seed و featureها در هر block/repetition عیناً مشترک‌اند | تست paired materialization |
 | [x] | پنج تکرار مستقل | برچسب canonical برابر `0..4` است | Plan و Analyzer آن را enforce می‌کنند |

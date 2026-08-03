@@ -40,11 +40,11 @@ published measurements have already been reproduced.
 |---|---|---|---|
 | Four synthetic workload categories | workload generator | Implemented/local | Article does not publish all distribution parameters; repository choices must be reported |
 | Matrix multiplication | `k8s/train.py` | Implemented/local | Actual CPU/BLAS behavior is server dependent |
-| Gradient/update effect | training step calculation | Implemented/local | Synthetic approximation |
+| Gradient/update effect | real `G`-MiB NumPy buffer update | Implemented/local | Memory bandwidth remains hardware dependent |
 | Exponential loss decay using `R` | trainer | Implemented/local | Validate logged terminal state |
-| Checkpoint interval `C` | trainer delay | Article deviation | Delay models overhead; it is not persistent checkpoint I/O |
-| Partition overhead `P` | trainer | Article deviation | Synthetic synchronization delay, not distributed training |
-| `T` is an estimate, not termination | trainer | Implemented/local | Proxy simulator differences must be disclosed |
+| Checkpoint interval `C` | bounded file write plus `fsync` | Implemented/local | Payload size and bandwidth assumptions are versioned |
+| Partition overhead `P` | disjoint matrix row partitions plus `G`-MiB peer copies | Implemented/local | Physical synchronization proxy, not multi-node distributed training |
+| `T` is derived estimate, not termination | shared work model | Implemented/local | Generator, trainer evidence, and simulator share model version `2.0` |
 | No workload requests/limits | reproduction manifests only | Server pending | Deliberately isolated profile; not a production default |
 | Controlled BLAS concurrency | trainer image environment | Implemented/local | One thread by default for repeatability |
 

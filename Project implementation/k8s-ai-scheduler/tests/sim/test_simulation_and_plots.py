@@ -44,7 +44,7 @@ def test_default_parameter_is_mean_inter_launch_time_not_total_window():
 def test_incomplete_simulation_raises_with_unfinished_ids():
     with pytest.raises(SimulationIncompleteError) as caught:
         run_paced(_jobs(), dt=0.1, max_time=0.01)
-    assert set(caught.value.unfinished_job_ids) == {"job-1", "job-2"}
+    assert set(caught.value.unfinished_job_ids) == {"job-0", "job-1", "job-2"}
 
 
 def test_trainer_model_uses_matrix_and_partitions():

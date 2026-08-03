@@ -4,10 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from experiments.schema import IncompleteRunError, percentile, summarize_jobs
+from experiments.schema import IncompleteRunError, percentile
 import results.metrics_collector as metrics_collector
 from results.metrics_collector import collect, parse_log_events
 from workload.generate_workload import deterministic_job_seed
+from k8s.work_model import WORK_MODEL_VERSION, estimate_work
 
 
 def _pod(name="light-000-12345678", phase="Succeeded"):
@@ -25,6 +26,7 @@ def _pod(name="light-000-12345678", phase="Succeeded"):
         "ml.scheduler/expected-jobs": "1",
         "ml.scheduler/seed": "1",
         "ml.scheduler/load-profile": "normal",
+        "ml.scheduler/work-model-version": WORK_MODEL_VERSION,
     }
     labels = {
         "ml.scheduler/run-id": "run-1",
@@ -60,6 +62,11 @@ def _pod(name="light-000-12345678", phase="Succeeded"):
                         value=str(deterministic_job_seed(1, name)),
                         value_from=None,
                     ),
+                    SimpleNamespace(
+                        name="ML_WORK_MODEL_VERSION",
+                        value=WORK_MODEL_VERSION,
+                        value_from=None,
+                    ),
                     *[
                         SimpleNamespace(
                             name=f"JOB_{feature}",
@@ -90,6 +97,47 @@ def _pod(name="light-000-12345678", phase="Succeeded"):
             )],
         ),
     )
+
+
+def _success_logs(pod, *, started=101.0, completed=105.0):
+    annotations = pod.metadata.annotations
+    estimate = estimate_work(
+        R=float(annotations["ml.scheduler/loss-reduction-rate"]),
+        M=int(annotations["ml.scheduler/matrix-size"]),
+        G=float(annotations["ml.scheduler/gradient-update-size"]),
+        C=int(annotations["ml.scheduler/checkpoint-interval"]),
+        P=int(annotations["ml.scheduler/model-partitions"]),
+    )
+    completion = {
+        "event": "EXECUTION_COMPLETED",
+        "timestamp": completed,
+        "job_id": pod.metadata.name,
+        "steps": estimate.planned_steps,
+        "final_loss": 0.01,
+        "termination_reason": estimate.termination_reason,
+        "work_model_version": WORK_MODEL_VERSION,
+        "step_budget": estimate.step_budget,
+        "convergence_steps": estimate.convergence_steps,
+        "gradient_bytes": estimate.gradient_bytes,
+        "checkpoint_bytes": estimate.checkpoint_bytes,
+        "checkpoint_count": estimate.checkpoint_count,
+        "checkpoint_seconds": 0.01,
+        "duration_seconds": completed - started,
+    }
+    return "\n".join([
+        json.dumps({
+            "event": "INITIALIZATION_COMPLETED",
+            "timestamp": started - 0.1,
+            "job_id": pod.metadata.name,
+            "work_model": estimate.to_dict(),
+        }),
+        json.dumps({
+            "event": "EXECUTION_STARTED",
+            "timestamp": started,
+            "job_id": pod.metadata.name,
+        }),
+        json.dumps(completion),
+    ])
 
 
 class FakeCoreApi:
@@ -123,12 +171,7 @@ def test_structured_and_legacy_markers_are_parsed():
 
 def test_strict_collection_returns_common_schema():
     pod = _pod()
-    logs = {
-        pod.metadata.name: "\n".join([
-            json.dumps({"event": "EXECUTION_STARTED", "timestamp": 101.0, "job_id": pod.metadata.name}),
-            json.dumps({"event": "EXECUTION_COMPLETED", "timestamp": 105.0, "job_id": pod.metadata.name}),
-        ])
-    }
+    logs = {pod.metadata.name: _success_logs(pod)}
     document = collect(
         "test",
         "ml.scheduler/run-id=run-1",
@@ -144,16 +187,12 @@ def test_strict_collection_returns_common_schema():
     assert document["run"]["status"] == "completed"
     assert document["summary"]["avg_jct"] == 5.0
     assert document["jobs"][0]["rank"] == pytest.approx(0.625)
+    assert document["jobs"][0]["trainer_evidence"]["work_model_version"] == WORK_MODEL_VERSION
 
 
 def test_strict_collection_validates_full_pod_contract():
     pod = _pod()
-    logs = {
-        pod.metadata.name: "\n".join([
-            json.dumps({"event": "EXECUTION_STARTED", "timestamp": 101.0}),
-            json.dumps({"event": "EXECUTION_COMPLETED", "timestamp": 105.0}),
-        ])
-    }
+    logs = {pod.metadata.name: _success_logs(pod)}
     contract = {
         "run_id": "run-1",
         "scheduler_name": "default-scheduler",
@@ -163,6 +202,7 @@ def test_strict_collection_validates_full_pod_contract():
         "expected_jobs": 1,
         "seed": 1,
         "load_profile": "normal",
+        "work_model_version": WORK_MODEL_VERSION,
         "scheduling_gate": None,
         "image": "registry.example/ml-sim@sha256:" + "a" * 64,
         "image_pull_secrets": ["registry-credentials"],
@@ -194,6 +234,23 @@ def test_strict_collection_validates_full_pod_contract():
             expected_pod_contract=contract,
         )
     assert "scheduling gates" in caught.value.document["jobs"][0]["error"]
+
+
+def test_stale_trainer_model_evidence_fails_closed():
+    pod = _pod()
+    logs = _success_logs(pod).replace(WORK_MODEL_VERSION, "stale-model")
+    with pytest.raises(IncompleteRunError) as caught:
+        collect(
+            "test",
+            expected_count=1,
+            run_id="run-1",
+            scenario="12-normal",
+            config_name="default",
+            repetition=0,
+            seed=1,
+            core_api=FakeCoreApi([pod], {pod.metadata.name: logs}),
+        )
+    assert "work model version mismatch" in caught.value.document["jobs"][0]["error"]
 
 
 def test_explicit_kube_context_is_forwarded(monkeypatch):

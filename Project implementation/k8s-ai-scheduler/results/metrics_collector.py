@@ -28,6 +28,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
 from workload.generate_workload import deterministic_job_seed  # noqa: E402
+from k8s.work_model import (  # noqa: E402
+    WORK_MODEL_ANNOTATION,
+    WORK_MODEL_ENV,
+    WORK_MODEL_VERSION,
+    estimate_work,
+)
 from experiments.schema import (  # noqa: E402
     IncompleteRunError,
     make_result_document,
@@ -58,6 +64,7 @@ RUN_ANNOTATIONS = {
     "expected_jobs": "ml.scheduler/expected-jobs",
     "seed": "ml.scheduler/seed",
     "load_profile": "ml.scheduler/load-profile",
+    "work_model_version": WORK_MODEL_ANNOTATION,
 }
 _LEGACY_LINE = re.compile(r"^\[(?P<timestamp>[0-9]+(?:\.[0-9]+)?)\]\s+(?P<event>[A-Z_]+)")
 
@@ -171,6 +178,9 @@ def _pod_contract_errors(pod: Any, expected: Mapping[str, Any]) -> List[str]:
         RUN_ANNOTATIONS["expected_jobs"]: str(expected.get("expected_jobs")),
         RUN_ANNOTATIONS["seed"]: str(expected.get("seed")),
         RUN_ANNOTATIONS["load_profile"]: expected.get("load_profile"),
+        RUN_ANNOTATIONS["work_model_version"]: expected.get(
+            "work_model_version", WORK_MODEL_VERSION
+        ),
     }
     for annotation, wanted in string_contract.items():
         if wanted is not None and annotations.get(annotation) != wanted:
@@ -241,12 +251,84 @@ def _pod_contract_errors(pod: Any, expected: Mapping[str, Any]) -> List[str]:
         errors.append(
             f"JOB_SEED={getattr(job_seed, 'value', None)!r} expected={expected_job_seed!r}"
         )
+    model_version = env.get(WORK_MODEL_ENV)
+    if getattr(model_version, "value", None) != WORK_MODEL_VERSION:
+        errors.append(
+            f"{WORK_MODEL_ENV}={getattr(model_version, 'value', None)!r} "
+            f"expected={WORK_MODEL_VERSION!r}"
+        )
     for feature, annotation in FEATURE_ANNOTATIONS.items():
         item = env.get(f"JOB_{feature}")
         if getattr(item, "value", None) != annotations.get(annotation):
             errors.append(
                 f"JOB_{feature}={getattr(item, 'value', None)!r} does not match {annotation}"
             )
+    return errors
+
+
+def _trainer_evidence_errors(
+    pod_name: str,
+    features: Optional[JobFeatures],
+    annotations: Mapping[str, Any],
+    events: Mapping[str, Mapping[str, Any]],
+) -> List[str]:
+    """Fail closed when a successful marker cannot prove the shared work model."""
+
+    errors: List[str] = []
+    annotation_version = annotations.get(WORK_MODEL_ANNOTATION)
+    if annotation_version != WORK_MODEL_VERSION:
+        errors.append(
+            f"annotation {WORK_MODEL_ANNOTATION}={annotation_version!r} "
+            f"expected={WORK_MODEL_VERSION!r}"
+        )
+    if features is None:
+        return errors
+
+    initialization = events.get("INITIALIZATION_COMPLETED")
+    completed = events.get("EXECUTION_COMPLETED")
+    if initialization is None:
+        errors.append("INITIALIZATION_COMPLETED marker missing")
+    else:
+        initialized_model = initialization.get("work_model")
+        if not isinstance(initialized_model, Mapping):
+            errors.append("INITIALIZATION_COMPLETED work_model evidence missing")
+        elif initialized_model.get("model_version") != WORK_MODEL_VERSION:
+            errors.append("INITIALIZATION_COMPLETED work model version mismatch")
+    if completed is None:
+        return errors
+
+    expected = estimate_work(
+        R=features.R,
+        M=int(features.M),
+        G=features.G,
+        C=int(features.C),
+        P=int(features.P),
+    )
+    exact_contract = {
+        "job_id": pod_name,
+        "work_model_version": WORK_MODEL_VERSION,
+        "steps": expected.planned_steps,
+        "step_budget": expected.step_budget,
+        "convergence_steps": expected.convergence_steps,
+        "termination_reason": expected.termination_reason,
+        "gradient_bytes": expected.gradient_bytes,
+        "checkpoint_bytes": expected.checkpoint_bytes,
+        "checkpoint_count": expected.checkpoint_count,
+    }
+    for field, wanted in exact_contract.items():
+        if completed.get(field) != wanted:
+            errors.append(
+                f"EXECUTION_COMPLETED {field}={completed.get(field)!r} expected={wanted!r}"
+            )
+    for field in ("final_loss", "checkpoint_seconds", "duration_seconds"):
+        value = completed.get(field)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) < 0
+        ):
+            errors.append(f"EXECUTION_COMPLETED {field} must be finite and >= 0")
     return errors
 
 
@@ -420,6 +502,7 @@ def collect(
             "status": "failed",
             "node_name": getattr(pod.spec, "node_name", None),
             "error": None,
+            "trainer_evidence": None,
         }
         errors: List[str] = []
         if name in feature_errors:
@@ -446,6 +529,14 @@ def collect(
             errors.append(f"trainer reported EXECUTION_FAILED: {failed_event.get('error', 'unknown error')}")
         started = events.get("EXECUTION_STARTED")
         completed = events.get("EXECUTION_COMPLETED")
+        errors.extend(
+            _trainer_evidence_errors(
+                name,
+                feature,
+                getattr(pod.metadata, "annotations", None) or {},
+                events,
+            )
+        )
         if not started:
             errors.append("EXECUTION_STARTED marker missing")
         if not completed:
@@ -461,6 +552,7 @@ def collect(
             else:
                 row["jct_s"] = row["completion_time"] - row["submission_time"]
                 row["status"] = "completed"
+                row["trainer_evidence"] = dict(completed)
         if errors:
             row["error"] = "; ".join(dict.fromkeys(errors))
             failures.append({"code": "JOB_FAILED", "job_id": name, "message": row["error"]})

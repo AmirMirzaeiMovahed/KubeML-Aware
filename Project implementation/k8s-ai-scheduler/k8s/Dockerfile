@@ -25,7 +25,7 @@ COPY requirements-trainer.txt /tmp/requirements-trainer.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
       -r /tmp/requirements-trainer.txt \
     && rm /tmp/requirements-trainer.txt /tmp/constraints.txt
-COPY --chown=10001:10001 k8s/train.py /app/train.py
+COPY --chown=10001:10001 k8s /app/k8s
 
 USER 10001:10001
-ENTRYPOINT ["python", "/app/train.py"]
+ENTRYPOINT ["python", "-m", "k8s.train"]

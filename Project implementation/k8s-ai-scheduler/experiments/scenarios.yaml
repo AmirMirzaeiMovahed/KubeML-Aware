@@ -125,6 +125,6 @@ load_profiles:
     feature_scales:
       M: 0.5
     description: >-
-      Article half-load profile: only matrix dimension M is halved; T, R, G,
-      C, and P remain unchanged. This assumption is embedded in every workload
-      document to prevent the previous undocumented T-and-M scaling.
+      Article half-load profile: matrix dimension M is halved; R, G, C, and P
+      remain unchanged, while T is re-estimated from the versioned physical
+      work model. This assumption is embedded in every workload document.

@@ -52,6 +52,7 @@ from experiments.submission import (  # noqa: E402
     submit_burst,
 )
 from results.metrics_collector import collect  # noqa: E402
+from k8s.work_model import WORK_MODEL_VERSION  # noqa: E402
 
 
 PLAN_SCHEMA_VERSION = "1.0"
@@ -1053,6 +1054,7 @@ def _pod_contract_for_spec(
         "expected_jobs": spec.jobs,
         "seed": spec.seed,
         "load_profile": spec.load,
+        "work_model_version": WORK_MODEL_VERSION,
         "scheduling_gate": None,
         "image": image,
         "image_pull_secrets": list(image_pull_secrets),

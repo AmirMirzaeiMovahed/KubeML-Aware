@@ -1,4 +1,3 @@
-import json
 import random
 from pathlib import Path
 
@@ -22,6 +21,7 @@ from workload.generate_workload import (
     prepare_output_directory,
     to_pod_yaml,
 )
+from k8s.work_model import WORK_MODEL_VERSION, estimate_work
 
 
 def test_metadata_contracts_cannot_drift_between_components():
@@ -43,14 +43,29 @@ def test_burst_is_deterministic_and_ids_depend_on_seed_and_index():
     assert len({job.job_id for job in first}) == 25
 
 
-def test_half_profile_only_scales_matrix_dimension():
+def test_half_profile_scales_matrix_and_reestimates_duration():
     normal = generate_burst(40, seed=987, load="normal")
     half = generate_burst(40, seed=987, load="half")
     for full_job, half_job in zip(normal, half):
         assert full_job.job_id == half_job.job_id
         assert half_job.M == max(1, int(round(full_job.M * 0.5)))
-        for feature in ("T", "R", "G", "C", "P"):
+        for feature in ("R", "G", "C", "P"):
             assert getattr(half_job, feature) == getattr(full_job, feature)
+        expected = estimate_work(
+            R=half_job.R,
+            M=half_job.M,
+            G=half_job.G,
+            C=half_job.C,
+            P=half_job.P,
+        )
+        assert half_job.T == round(expected.estimated_training_seconds, 6)
+        assert half_job.T < full_job.T
+
+
+def test_sampled_duration_is_derived_from_the_shared_work_model():
+    for job in generate_burst(30, seed=18):
+        estimate = estimate_work(R=job.R, M=job.M, G=job.G, C=job.C, P=job.P)
+        assert job.T == round(estimate.estimated_training_seconds, 6)
 
 
 def test_partition_sampling_includes_upper_bound():
@@ -93,6 +108,12 @@ def test_pod_yaml_is_valid_and_contains_run_contract():
     assert annotations["ml.scheduler/fixed-delay-seconds"] == "1.0"
     assert annotations["ml.scheduler/reverse"] == "false"
     assert annotations["ml.scheduler/expected-jobs"] == "12"
+    assert annotations["ml.scheduler/work-model-version"] == WORK_MODEL_VERSION
+    environment = {
+        item["name"]: item.get("value")
+        for item in manifest["spec"]["containers"][0]["env"]
+    }
+    assert environment["ML_WORK_MODEL_VERSION"] == WORK_MODEL_VERSION
     assert manifest["spec"]["automountServiceAccountToken"] is False
     assert manifest["spec"]["imagePullSecrets"] == [
         {"name": "registry-credentials"}

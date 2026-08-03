@@ -3,9 +3,9 @@
 The article defines four workload categories but does not publish the exact
 sampling distributions.  ``CATEGORY_RANGES`` therefore remains an explicit,
 versioned project assumption.  The article's half-load scenario is represented
-by halving only matrix dimension ``M``; all other sampled features are left
-unchanged.  The selected profile and every assumption are written to
-``jobs.json`` so a run can be audited later.
+by halving only matrix dimension ``M``; the duration estimate ``T`` is then
+recomputed from the versioned work model.  The selected profile and every
+assumption are written to ``jobs.json`` so a run can be audited later.
 
 The command produces two byte-stable manifest sets from one sampled burst:
 ``pods_default`` and ``pods_custom``.  Existing non-empty output directories
@@ -32,6 +32,13 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 import yaml
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from k8s.work_model import (  # noqa: E402
+    WORK_MODEL_ANNOTATION,
+    WORK_MODEL_ENV,
+    WORK_MODEL_VERSION,
+    estimate_work,
+    model_assumptions,
+)
 from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
 
 
@@ -40,23 +47,24 @@ OUTPUT_SENTINEL = ".ml-scheduler-workload"
 FEATURE_NAMES = ("T", "R", "M", "G", "C", "P")
 
 CATEGORY_RANGES: Dict[str, Dict[str, tuple[float, float]]] = {
-    # T: estimated training time (s), R: per-step loss reduction rate,
-    # M: square matrix dimension, G: gradient size (MB),
+    # T is derived from R/M/G/C/P by the versioned work model rather than
+    # sampled independently. R is the per-step loss reduction rate,
+    # M is square matrix dimension, G is gradient size (MiB),
     # C: checkpoint interval (steps), P: model partition count.
     "light": {
-        "T": (5, 15), "R": (0.08, 0.15), "M": (64, 128),
+        "R": (0.08, 0.15), "M": (64, 128),
         "G": (1, 5), "C": (50, 100), "P": (1, 1),
     },
     "heavy": {
-        "T": (30, 60), "R": (0.03, 0.08), "M": (512, 1024),
+        "R": (0.03, 0.08), "M": (512, 1024),
         "G": (20, 50), "C": (20, 50), "P": (2, 4),
     },
     "io_intensive": {
-        "T": (15, 30), "R": (0.05, 0.10), "M": (128, 256),
+        "R": (0.05, 0.10), "M": (128, 256),
         "G": (5, 15), "C": (5, 15), "P": (1, 2),
     },
     "slow_converging": {
-        "T": (40, 70), "R": (0.01, 0.03), "M": (128, 256),
+        "R": (0.01, 0.03), "M": (128, 256),
         "G": (5, 15), "C": (30, 60), "P": (1, 2),
     },
 }
@@ -77,7 +85,7 @@ LOAD_PROFILES: Dict[str, Dict[str, Any]] = {
         "feature_scales": {"M": 0.5},
         "description": (
             "Article half-load profile: matrix dimension M is halved; "
-            "T, R, G, C, and P are unchanged."
+            "R, G, C, and P are unchanged and T is re-estimated from them and M."
         ),
     },
 }
@@ -162,15 +170,20 @@ def deterministic_job_seed(run_seed: int, job_id: str) -> int:
 def _sample_category(category: str, rng: random.Random, *, seed: int, index: int) -> JobFeatures:
     ranges = CATEGORY_RANGES[category]
     p_low, p_high = (int(ranges["P"][0]), int(ranges["P"][1]))
+    R = round(rng.uniform(*ranges["R"]), 4)
+    M = rng.randint(math.ceil(ranges["M"][0]), math.floor(ranges["M"][1]))
+    G = round(rng.uniform(*ranges["G"]), 2)
+    C = rng.randint(math.ceil(ranges["C"][0]), math.floor(ranges["C"][1]))
+    P = rng.randint(p_low, p_high)
+    estimate = estimate_work(R=R, M=M, G=G, C=C, P=P)
     job = JobFeatures(
         job_id=deterministic_job_id(category, seed, index),
-        T=round(rng.uniform(*ranges["T"]), 2),
-        R=round(rng.uniform(*ranges["R"]), 4),
-        M=rng.randint(math.ceil(ranges["M"][0]), math.floor(ranges["M"][1])),
-        G=round(rng.uniform(*ranges["G"]), 2),
-        C=rng.randint(math.ceil(ranges["C"][0]), math.floor(ranges["C"][1])),
-        # randint is inclusive at both ends, unlike the previous int(uniform()).
-        P=rng.randint(p_low, p_high),
+        T=round(estimate.estimated_training_seconds, 6),
+        R=R,
+        M=M,
+        G=G,
+        C=C,
+        P=P,
     )
     _validate_job(job)
     return job
@@ -211,6 +224,10 @@ def generate_burst(n_jobs: int, seed: Optional[int] = None, load: str = "normal"
             scaled = float(getattr(job, feature)) * float(scale)
             # M is a matrix dimension and must remain an integer accepted by train.py.
             setattr(job, feature, max(1, int(round(scaled))) if feature == "M" else round(scaled, 4))
+        estimate = estimate_work(
+            R=job.R, M=int(job.M), G=job.G, C=int(job.C), P=int(job.P)
+        )
+        job.T = round(estimate.estimated_training_seconds, 6)
         _validate_job(job)
         jobs.append(job)
 
@@ -248,6 +265,7 @@ def build_workload_document(
             "category_weights": CATEGORY_WEIGHTS,
             "note": "The paper does not publish exact category distributions; these are project assumptions.",
         },
+        "work_model_assumptions": model_assumptions(),
         "jobs": [
             {
                 "job_id": job.job_id,
@@ -339,6 +357,7 @@ def _pod_manifest(
         RUN_ANNOTATIONS["expected_jobs"]: str(expected_jobs),
         "ml.scheduler/seed": str(seed),
         "ml.scheduler/load-profile": load_profile,
+        WORK_MODEL_ANNOTATION: WORK_MODEL_VERSION,
     })
 
     spec: Dict[str, Any] = {
@@ -374,6 +393,7 @@ def _pod_manifest(
                     "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}},
                 },
                 {"name": "JOB_SEED", "value": str(deterministic_job_seed(seed, job.job_id))},
+                {"name": WORK_MODEL_ENV, "value": WORK_MODEL_VERSION},
                 *[
                     {"name": f"JOB_{name}", "value": str(getattr(job, name))}
                     for name in FEATURE_NAMES
