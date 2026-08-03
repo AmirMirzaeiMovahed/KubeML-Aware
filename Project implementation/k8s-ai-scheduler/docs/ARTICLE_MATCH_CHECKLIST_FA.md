@@ -43,8 +43,8 @@
 | [x] | `T` تخمین مشتق‌شده است | از `R/M/G/C/P` و مدل نسخه‌دار ساخته می‌شود و شرط توقف Trainer نیست | مدل مشترک Generator/Trainer/Simulator و شاهد log |
 | [x] | سناریوی 12 Job با load عادی | `12-normal` | 5 repetition در Plan |
 | [x] | سناریوی 48 Job با load عادی | `48-normal` | 5 repetition در Plan |
-| [x] | سناریوی 48 Job با half load | `48-half`؛ `M` نصف و `T` از مدل کار دوباره محاسبه می‌شود | تست paired feature و `T` مشتق‌شده |
-| [?] | تعریف دقیق half load | مقاله همه scalingها را روشن نکرده؛ فرض «فقط M» در Plan و خروجی ثبت شده است | باید assumption گزارش شود |
+| [x] | سناریوی 48 Job با half load | `48-half`؛ scale سراسری `M` برای رسیدن به ۵۰٪ کار تخمینی کالیبره و `T` بازسازی می‌شود | تست نسبت، paired feature و شاهد `jobs.json` |
+| [?] | تعریف دقیق half load | مقاله scaling دقیق را روشن نکرده؛ تعریف عملیاتی ۵۰٪ کار تجمیعی، tolerance و scale در Plan/خروجی ثبت می‌شود | باید به‌عنوان assumption گزارش شود |
 | [x] | workload یکسان بین default/custom | seed و featureها در هر block/repetition عیناً مشترک‌اند | تست paired materialization |
 | [x] | پنج تکرار مستقل | برچسب canonical برابر `0..4` است | Plan و Analyzer آن را enforce می‌کنند |
 
@@ -77,7 +77,7 @@ Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 | [x] | ILT | فاصله execution-startهای مرتب‌شده | marker همه Jobها اجباری است |
 | [x] | ECDF میانگین | ECDF هر run روی grid مشترک | pooling بین repetitionها ممنوع است |
 | [x] | IQR | percentileهای 25/75 بین runها | داده و نمودار تولید می‌شود |
-| [x] | Confidence interval | Student-t 95% روی metric سطح run | تست آماری دارد |
+| [x] | Confidence interval | Student-t 95% روی metric سطح run و اختلاف‌های paired بر اساس scenario/repetition/seed | CSV و تست آماری paired |
 | [x] | رد داده ناقص | Collector fail-closed و failure artifact | missing/failed/duplicate/mismatch رد می‌شود |
 | [x] | اثبات ترتیب واقعی | scheduler record در نتیجه custom embed و جداگانه archive می‌شود | rank/order/job set/timestamp/pacing دقیقاً validate می‌شود |
 | [x] | متادیتای بازتولید | Plan/artifact hash، context، Helm، Kubernetes، Node و image IDs | نبود یا mismatch باعث رد resume/analysis می‌شود |

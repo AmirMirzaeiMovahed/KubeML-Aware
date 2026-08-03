@@ -1,4 +1,4 @@
-schema_version: "1.0"
+schema_version: "1.1"
 kind: ml-scheduler-experiment-plan
 description: >-
   Exact pre-registered paper reproduction matrix. The base plan contains
@@ -120,11 +120,16 @@ profiles:
 load_profiles:
   normal:
     feature_scales: {}
+    target_estimated_work_ratio: 1.0
+    calibration_feature: null
+    calibration_method: identity
     description: Sampled features are unchanged.
   half:
-    feature_scales:
-      M: 0.5
+    feature_scales: {}
+    target_estimated_work_ratio: 0.5
+    calibration_feature: M
+    calibration_method: deterministic-global-bisection-v1
     description: >-
-      Article half-load profile: matrix dimension M is halved; R, G, C, and P
-      remain unchanged, while T is re-estimated from the versioned physical
-      work model. This assumption is embedded in every workload document.
+      Article half-load profile: one deterministic global M scale targets 50%
+      aggregate estimated physical work; R, G, C, and P remain unchanged, and
+      T is re-estimated. Calibration evidence is embedded in every workload.

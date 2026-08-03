@@ -1,6 +1,6 @@
 # Pre-cluster validation report
 
-Date: 2026-07-11
+Date: 2026-08-04
 
 This report records only validations completed without a reachable target
 Kubernetes cluster or local Docker daemon. It is not evidence of a successful
@@ -9,17 +9,17 @@ image build, registry push, server-side dry run, or live deployment.
 ## Release candidate
 
 - Project version: `0.1.0`
-- Local Python: `3.12.13`
+- Local Python: `3.11.9`
 - Helm used for validation: `v4.2.0`
 - Offline Kubernetes schema target: `1.36.0`
 - Article plan lock: `experiments/locks/article-70.json`
-  - 70 runs; 25 pacing + 45 main
+  - schema 1.1; 70 runs; 25 pacing + 45 main
   - canonical plan SHA-256:
-    `d1fd13b06d446e1360fcee0e37199811c64ec49f0fb687bba6d71bdda0817ae8`
+    `88554972be8629880dfea9073d8c0ed6515fe3ca918ef2a3bb0f3a7f3405becb`
 - Extended plan lock: `experiments/locks/extended-90.json`
-  - 90 runs; 30 pacing + 60 main
+  - schema 1.1; 90 runs; 30 pacing + 60 main
   - canonical plan SHA-256:
-    `c0a1f72dd626cfa8c83f096c78fcfd03c42a6787a141e04eb88e310d96866337`
+    `a031c66bbb8553d13b5c0d68a42bfba6e2eb25f87e544bab39089b0e5c115460`
 - Wheel: `dist/k8s_ai_scheduler-0.1.0-py3-none-any.whl`
   - file SHA-256:
     `39c3ed7c4566134e4c4d53afade5c6423e40f78f5ab4dea6f668eeac21de8017`
@@ -34,7 +34,7 @@ image build, registry push, server-side dry run, or live deployment.
 |---|---|
 | Exact dependency imports and `pip check` | Passed; no broken requirements |
 | Python compile check | Passed for scheduler, workload, trainer, results, simulation, and experiments |
-| Automated tests | **88 passed**, zero skipped/failing |
+| Automated tests | **107 passed**, zero skipped/failing |
 | PowerShell parser validation | Passed |
 | Bash `-n` validation | Passed |
 | Helm values JSON Schema | Passed |
@@ -50,6 +50,8 @@ image build, registry push, server-side dry run, or live deployment.
 | Plan invariants | Exact 70/90 counts, unique run IDs, `0..4` repetitions, paired seeds, and canonical hashes verified |
 | Result/evidence analysis | Complete 70-run synthetic Kubernetes-shaped evidence set passed strict end-to-end analysis |
 | Simulator smoke | Run/CSV/mean-ECDF/IQR plot generation passed; output remains proxy evidence only |
+| Simulator calibration | Content-addressed hardware benchmark CLI and tamper/stale-model rejection passed |
+| Paired inference | Baseline-minus-candidate effects and Student-t 95% CIs by scenario/repetition/seed passed |
 | Wheel build/install | Built, contents inspected, installed outside the source directory, resources and 70/90 plans imported successfully |
 | Clean source backup | Archive contents/integrity verified; checksum sidecar supplied |
 

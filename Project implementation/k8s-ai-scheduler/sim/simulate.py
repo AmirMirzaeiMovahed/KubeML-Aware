@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from k8s.work_model import (  # noqa: E402
     CONVERGENCE_THRESHOLD,
+    MATMUL_SECONDS_AT_128,
     WORK_MODEL_VERSION,
     estimate_work,
 )
@@ -29,13 +30,15 @@ class TrainerWorkModel:
     """Hardware calibration parameters for the trainer-derived proxy."""
 
     model_version: str = WORK_MODEL_VERSION
+    calibrated: bool = False
+    calibration_id: str = "uncalibrated-defaults"
     matrix_reference: float = 128.0
-    matmul_seconds_at_reference: float = 0.0001
+    matmul_seconds_at_reference: float = MATMUL_SECONDS_AT_128
     gradient_scale: float = 1.0
     synchronization_scale: float = 1.0
     checkpoint_scale: float = 1.0
     estimated_time_weight: float = 0.0
-    convergence_threshold: float = 0.02
+    convergence_threshold: float = CONVERGENCE_THRESHOLD
 
     def validate(self) -> None:
         if self.model_version != WORK_MODEL_VERSION:
@@ -43,6 +46,12 @@ class TrainerWorkModel:
                 f"model_version must be {WORK_MODEL_VERSION!r}; "
                 f"got {self.model_version!r}"
             )
+        if not isinstance(self.calibrated, bool):
+            raise ValueError("calibrated must be a boolean")
+        if not isinstance(self.calibration_id, str) or not self.calibration_id:
+            raise ValueError("calibration_id must be a non-empty string")
+        if self.calibrated and not self.calibration_id.startswith("sha256:"):
+            raise ValueError("a calibrated model requires a sha256 calibration_id")
         for name in (
             "matrix_reference",
             "matmul_seconds_at_reference",

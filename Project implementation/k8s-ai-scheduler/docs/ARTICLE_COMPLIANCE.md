@@ -57,7 +57,7 @@ published measurements have already been reproduced.
 | Identical default/custom workload | deterministic paired generation | Implemented/local; server pairing pending |
 | 12 jobs normal | `12-normal` | Server pending |
 | 48 jobs normal | `48-normal` | Server pending |
-| 48 jobs half | `48-half` | Server pending |
+| 48 jobs half | `48-half`; deterministic `M` calibration targets 50% aggregate modeled work | Implemented/local; server pending |
 | Fixed pacing 0, 1, 2, 5 seconds | pacing block | Server pending |
 | Default baseline | `default` | Server pending |
 | Intended custom order | `custom-baseline` (plus fixed-delay variants) | Server pending |
@@ -90,11 +90,15 @@ retain independent run IDs.
 | ILT | consecutive execution-start timestamps | Sort timestamps; require complete marker set |
 | Mean ECDF over repetitions | interpolate each run ECDF on common grid | Do not pool jobs across repetitions |
 | IQR band | 25th/75th percentiles across run ECDFs | Plot and retain underlying numeric data |
+| Scheduler effect CI | paired baseline-minus-candidate differences by scenario/repetition/seed | Report Student-t 95% CI for absolute and percentage effects |
 | Reproducibility metadata | schema-versioned result records | Include seed, scenario, config, repetition, image digests, Kubernetes/node/tool versions |
 | Failure handling | strict collector | Any failed/missing/duplicate Pod invalidates the run |
 
-Checked-in simulator CSV/JSON/PNG files are reference artifacts only. They are
-not cluster measurements and do not satisfy the article's evaluation evidence.
+Generated simulator CSV/JSON/PNG files are ignored rather than checked in as
+apparently authoritative evidence. Every simulation is marked exploratory;
+hardware-calibrated runs carry a content-addressed benchmark ID, and
+uncalibrated runs are labeled accordingly. Neither satisfies the article's
+cluster evaluation evidence.
 
 ## Adaptive RFAP extension—explicitly not part of the article
 

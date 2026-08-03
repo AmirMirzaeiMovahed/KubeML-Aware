@@ -27,7 +27,7 @@ The packaged Helm release requires Kubernetes 1.30 or newer for all profiles.
 scheduler/                 Ranking, reproduction scheduler, gated controller
 workload/                  Deterministic paired workload generation
 k8s/                       Synthetic trainer and its container image
-results/                   Strict collection and checked-in reference outputs
+results/                   Strict collection code and local generated outputs
 sim/                       Proxy simulation and statistical plots
 experiments/               Locked plans, result schema, orchestration, analysis
 deploy/helm/               Reproduction and production Helm profiles
@@ -84,12 +84,17 @@ local values file.
 
 ```powershell
 python -m pytest
-python -m sim.run_experiments --results-dir artifacts/sim
+python -m sim.calibration --output artifacts/calibration.json
+python -m sim.run_experiments --results-dir artifacts/sim `
+  --calibration artifacts/calibration.json --require-calibration
 python -m sim.plot_results --results-dir artifacts/sim
 ```
 
 The simulator validates ranking and analysis logic but does not prove
-Kubernetes behavior or reproduce the article's wall-clock measurements.
+Kubernetes behavior or reproduce the article's wall-clock measurements. Its
+JSON records always remain `exploratory-only`; a content-addressed calibration
+records the measured machine and trainer primitive samples, while an omitted
+calibration is explicitly labeled `uncalibrated-assumptions`.
 
 Workload generation, the trainer, collection validation, and the simulator
 share the versioned model in `k8s/work_model.py`. `T` is derived from
@@ -98,6 +103,11 @@ updates a real `G`-MiB gradient buffer, copies it for partition synchronization,
 and writes plus `fsync`s bounded checkpoints every `C` steps. Every Pod and
 terminal log records the model version, and strict collection rejects stale or
 incomplete work-model evidence.
+
+The ambiguous half-load profile is operationalized as 50% of aggregate
+estimated physical work. A deterministic burst-level search selects one global
+`M` scale (rather than blindly halving a cubic dimension), recomputes `T`, and
+stores the target, achieved ratio, tolerance, and selected scale in `jobs.json`.
 
 ## Kubernetes packaging
 

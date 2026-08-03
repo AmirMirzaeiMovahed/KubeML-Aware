@@ -24,10 +24,14 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Generated experiment data. Checked-in reference results remain tracked.
+# Generated experiment data. Authoritative evidence belongs in an immutable
+# external archive; local simulator/cluster outputs must not look like source.
 artifacts/
 workload/runs/
 workload/cluster_runs/
+results/*.csv
+results/*.json
+results/*.png
 results/runs/
 results/cluster/
 results/cluster_plan*.json

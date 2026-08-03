@@ -24,7 +24,8 @@ sys.path.append(str(Path(__file__).resolve().parent))
 sys.path.append(str(ROOT / "workload"))
 sys.path.append(str(ROOT))
 from generate_workload import category_for_job, generate_burst  # noqa: E402
-from simulate import (  # noqa: E402
+from sim.calibration import load_calibrated_model  # noqa: E402
+from sim.simulate import (  # noqa: E402
     SimResult,
     TrainerWorkModel,
     results_to_dicts,
@@ -37,6 +38,7 @@ from experiments.schema import (  # noqa: E402
     summarize_jobs,
     validate_result_document,
 )
+from experiments.statistics import paired_improvement_table  # noqa: E402
 
 
 N_CORES = 4
@@ -171,6 +173,12 @@ def _result_document(
             "simulation": {
                 **{key: value for key, value in asdict(settings).items() if key != "work_model"},
                 "work_model": asdict(settings.work_model),
+                "calibration_status": (
+                    "hardware-calibrated"
+                    if settings.work_model.calibrated
+                    else "uncalibrated-assumptions"
+                ),
+                "claim_eligibility": "exploratory-only",
                 "warning": "Proxy model; final claims require real Kubernetes measurements.",
             }
         },
@@ -332,25 +340,18 @@ def main_comparison(
         ["avg_jct", "tail_jct_p95", "max_jct", "min_jct", "makespan", "avg_ilt"]
     ].mean()
 
-    improvements: Dict[str, Any] = {}
-    if include_adaptive:
-        for scenario, _, _ in SCENARIOS:
-            base = summary.loc[(scenario, "default")]
-            custom = summary.loc[(scenario, "custom-baseline")]
-            adaptive = summary.loc[(scenario, "custom-adaptive")]
-            improvements[scenario] = {
-                "custom_vs_default_jct_pct": 100 * (base.avg_jct - custom.avg_jct) / base.avg_jct,
-                "adaptive_vs_default_jct_pct": 100 * (base.avg_jct - adaptive.avg_jct) / base.avg_jct,
-                "adaptive_vs_custom_jct_pct": 100 * (custom.avg_jct - adaptive.avg_jct) / custom.avg_jct,
-                "custom_vs_default_makespan_pct": 100 * (base.makespan - custom.makespan) / base.makespan,
-                "adaptive_vs_default_makespan_pct": 100 * (base.makespan - adaptive.makespan) / base.makespan,
-                "adaptive_vs_custom_makespan_pct": 100 * (custom.makespan - adaptive.makespan) / custom.makespan,
-            }
+    paired = paired_improvement_table(dataframe)
+    paired.to_csv(output / "paired_improvements.csv", index=False)
+    improvements: Dict[str, Any] = {
+        "method": "within-scenario repetition/seed paired differences with Student-t 95% CI",
+        "comparisons": paired.to_dict(orient="records"),
+    }
     summary_document = {
         "schema_version": RESULT_SCHEMA_VERSION,
         "kind": "ml-scheduler-experiment-summary",
         "source": "simulation",
         "settings": {**asdict(settings), "work_model": asdict(settings.work_model)},
+        "claim_eligibility": "exploratory-only",
         "improvements": improvements,
     }
     _atomic_json(output / "summary_metrics.json", summary_document)
@@ -399,12 +400,14 @@ def _parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--cpu-threshold", type=float, default=0.85)
     parser.add_argument("--max-wait", type=float, default=6.0)
     parser.add_argument("--max-time", type=float, default=100000.0)
-    parser.add_argument("--matrix-reference", type=float, default=128.0)
-    parser.add_argument("--matmul-seconds-at-reference", type=float, default=0.0001)
-    parser.add_argument("--gradient-scale", type=float, default=1.0)
-    parser.add_argument("--synchronization-scale", type=float, default=1.0)
-    parser.add_argument("--checkpoint-scale", type=float, default=1.0)
-    parser.add_argument("--estimated-time-weight", type=float, default=0.0)
+    parser.add_argument("--calibration", type=Path)
+    parser.add_argument("--require-calibration", action="store_true")
+    parser.add_argument("--matrix-reference", type=float)
+    parser.add_argument("--matmul-seconds-at-reference", type=float)
+    parser.add_argument("--gradient-scale", type=float)
+    parser.add_argument("--synchronization-scale", type=float)
+    parser.add_argument("--checkpoint-scale", type=float)
+    parser.add_argument("--estimated-time-weight", type=float)
     parser.add_argument("--sensitivity-alpha", type=float, nargs="*")
     parser.add_argument("--sensitivity-dt", type=float, nargs="*")
     return parser.parse_args(list(argv) if argv is not None else None)
@@ -414,14 +417,32 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     args = _parse_args(argv)
     if args.repeats <= 0:
         raise ValueError("--repeats must be > 0")
-    work_model = TrainerWorkModel(
-        matrix_reference=args.matrix_reference,
-        matmul_seconds_at_reference=args.matmul_seconds_at_reference,
-        gradient_scale=args.gradient_scale,
-        synchronization_scale=args.synchronization_scale,
-        checkpoint_scale=args.checkpoint_scale,
-        estimated_time_weight=args.estimated_time_weight,
-    )
+    manual_model_values = {
+        "matrix_reference": args.matrix_reference,
+        "matmul_seconds_at_reference": args.matmul_seconds_at_reference,
+        "gradient_scale": args.gradient_scale,
+        "synchronization_scale": args.synchronization_scale,
+        "checkpoint_scale": args.checkpoint_scale,
+        "estimated_time_weight": args.estimated_time_weight,
+    }
+    if args.calibration:
+        supplied_overrides = [
+            name for name, value in manual_model_values.items() if value is not None
+        ]
+        if supplied_overrides:
+            raise ValueError(
+                "--calibration cannot be combined with manual model overrides: "
+                + ", ".join(supplied_overrides)
+            )
+        work_model = load_calibrated_model(args.calibration)
+    else:
+        if args.require_calibration:
+            raise ValueError("--require-calibration requires --calibration")
+        defaults = TrainerWorkModel()
+        work_model = TrainerWorkModel(**{
+            name: getattr(defaults, name) if value is None else value
+            for name, value in manual_model_values.items()
+        })
     settings = SimulationSettings(
         n_cores=args.n_cores,
         dt=args.dt,
@@ -452,7 +473,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     print("\n=== Main comparison ===")
     print(main_summary.round(3).to_string())
     if improvements:
-        print("\n=== Improvement percentages ===")
+        print("\n=== Paired improvement estimates ===")
         print(json.dumps(improvements, indent=2))
     if args.sensitivity_alpha or args.sensitivity_dt:
         sensitivity_analysis(

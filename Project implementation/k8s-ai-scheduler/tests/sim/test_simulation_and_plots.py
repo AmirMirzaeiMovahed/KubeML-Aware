@@ -4,6 +4,7 @@ import pytest
 
 from scheduler.rank import JobFeatures
 from sim.plot_results import mean_ecdf_iqr
+from sim.run_experiments import SimulationSettings, main_comparison
 from sim.simulate import (
     SimulationIncompleteError,
     TrainerWorkModel,
@@ -70,3 +71,20 @@ def test_mean_ecdf_and_iqr_are_computed_across_runs():
     assert mean == pytest.approx([0.25, 0.75, 1.0])
     assert lower == pytest.approx([0.125, 0.625, 1.0])
     assert upper == pytest.approx([0.375, 0.875, 1.0])
+
+
+def test_simulation_outputs_paired_effects_and_exploratory_label(tmp_path):
+    dataframe, _summary, documents, improvements = main_comparison(
+        settings=SimulationSettings(dt=0.1),
+        results_dir=tmp_path,
+        include_adaptive=False,
+        repeats=1,
+    )
+    assert len(dataframe) == 9
+    assert improvements["comparisons"]
+    assert (tmp_path / "paired_improvements.csv").is_file()
+    assert all(
+        document["environment"]["simulation"]["claim_eligibility"]
+        == "exploratory-only"
+        for document in documents.values()
+    )

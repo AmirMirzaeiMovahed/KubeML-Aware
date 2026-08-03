@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
-import statistics
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 import pandas as pd
 
@@ -23,6 +21,10 @@ from experiments.run_cluster import (  # noqa: E402
     validate_result_for_spec,
 )
 from experiments.schema import RESULT_SCHEMA_VERSION, validate_result_document  # noqa: E402
+from experiments.statistics import (  # noqa: E402
+    mean_ci95 as _mean_ci95,
+    paired_improvement_table,
+)
 from plot_results import plot_pacing_sweep, plot_scenario  # noqa: E402
 
 
@@ -131,28 +133,6 @@ def flatten_documents(documents: Mapping[str, Mapping[str, Any]]) -> Tuple[pd.Da
     return pd.DataFrame(summary_rows), pd.DataFrame(job_rows)
 
 
-_T_CRITICAL_975 = {
-    1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
-    6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
-    11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
-    16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
-    21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
-    26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
-}
-
-
-def _mean_ci95(values: Sequence[float]) -> Tuple[float, float, float]:
-    """Two-sided Student-t 95% CI across independent run-level metrics."""
-    values = [float(value) for value in values]
-    mean = statistics.fmean(values)
-    if len(values) < 2:
-        return mean, mean, mean
-    degrees_of_freedom = len(values) - 1
-    critical = _T_CRITICAL_975.get(degrees_of_freedom, 1.96)
-    margin = critical * statistics.stdev(values) / math.sqrt(len(values))
-    return mean, mean - margin, mean + margin
-
-
 def aggregate_run_metrics(summary: pd.DataFrame) -> pd.DataFrame:
     metrics = ["avg_jct", "tail_jct_p95", "max_jct", "min_jct", "makespan", "avg_ilt"]
     rows: List[Dict[str, Any]] = []
@@ -172,6 +152,7 @@ def aggregate_run_metrics(summary: pd.DataFrame) -> pd.DataFrame:
 
 
 def improvement_table(aggregated: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Legacy ratio-of-means view retained for CSV compatibility."""
     comparisons: List[Dict[str, Any]] = []
     for scenario in sorted(set(aggregated.scenario) - {"48-half-pacing"}):
         subset = aggregated[aggregated.scenario == scenario].set_index("config")
@@ -219,6 +200,8 @@ def analyze(
     summary.to_csv(output_dir / "all_runs.csv", index=False)
     jobs.to_csv(output_dir / "all_jobs.csv", index=False)
     aggregate.to_csv(output_dir / "aggregate_metrics.csv", index=False)
+    paired_improvements = paired_improvement_table(summary)
+    paired_improvements.to_csv(output_dir / "paired_improvements.csv", index=False)
 
     pacing = summary[summary.scenario == "48-half-pacing"]
     main = summary[summary.scenario != "48-half-pacing"]
@@ -240,7 +223,12 @@ def analyze(
         "missing_run_ids": missing,
         "strictly_complete": not missing,
         "improvements": improvements,
-        "confidence_interval": "Two-sided Student-t 95% CI over independent run-level metrics.",
+        "paired_improvements": paired_improvements.to_dict(orient="records"),
+        "pairing_keys": ["scenario", "repetition", "seed"],
+        "confidence_interval": (
+            "Two-sided Student-t 95% CI over run-level metrics; scheduler "
+            "effects use within-scenario repetition/seed paired differences."
+        ),
         "ecdf_method": "Per-run ECDFs evaluated on a common grid; mean curve and 25th–75th percentile band across runs.",
     }
     _atomic_json(output_dir / "analysis.json", report)

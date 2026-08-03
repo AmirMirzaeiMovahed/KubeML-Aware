@@ -25,6 +25,7 @@ ml-workload = "workload.generate_workload:main"
 ml-run-cluster = "experiments.run_cluster:main"
 ml-analyze = "experiments.analyze:main"
 ml-collect = "results.metrics_collector:main"
+ml-calibrate-trainer = "sim.calibration:main"
 ml-validate-manifests = "scripts.validate_manifests:main"
 
 [project.optional-dependencies]

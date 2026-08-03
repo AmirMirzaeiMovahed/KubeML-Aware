@@ -1,9 +1,10 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
-from experiments.analyze import _mean_ci95, analyze
+from experiments.analyze import _mean_ci95, analyze, paired_improvement_table
 from experiments.run_cluster import (
     DEFAULT_PLAN,
     ClusterRunError,
@@ -111,6 +112,33 @@ def test_confidence_interval_surrounds_mean():
     mean, lower, upper = _mean_ci95([1, 2, 3, 4, 5])
     assert mean == 3.0
     assert lower < mean < upper
+
+
+def test_scheduler_effects_use_paired_differences_and_confidence_intervals():
+    rows = []
+    for repetition, (baseline, candidate) in enumerate(
+        [(10.0, 8.0), (20.0, 10.0), (40.0, 20.0)]
+    ):
+        for config, avg_jct in (("default", baseline), ("custom-baseline", candidate)):
+            rows.append({
+                "scenario": "48-normal",
+                "config": config,
+                "rep": repetition,
+                "seed": 2000 + repetition,
+                "avg_jct": avg_jct,
+                "makespan": avg_jct * 2,
+            })
+    paired = paired_improvement_table(pd.DataFrame(rows))
+    assert len(paired) == 1
+    result = paired.iloc[0]
+    assert result.pairs == 3
+    assert result.avg_jct_difference_mean == pytest.approx(32 / 3)
+    assert result.avg_jct_improvement_pct_mean == pytest.approx(40.0)
+    assert (
+        result.avg_jct_improvement_pct_ci95_low
+        < result.avg_jct_improvement_pct_mean
+        < result.avg_jct_improvement_pct_ci95_high
+    )
 
 
 def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
@@ -266,7 +294,10 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
     report = analyze(runs_dir=runs, output_dir=tmp_path / "analysis", make_plots=False)
     assert report["run_count"] == 70
     assert report["strictly_complete"] is True
+    assert report["pairing_keys"] == ["scenario", "repetition", "seed"]
+    assert report["paired_improvements"]
     assert (tmp_path / "analysis" / "aggregate_metrics.csv").is_file()
+    assert (tmp_path / "analysis" / "paired_improvements.csv").is_file()
 
 
 def _one_job_spec(*, reverse=False, pacing_mode="none", fixed_delay=0.0):

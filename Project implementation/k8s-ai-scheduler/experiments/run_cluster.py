@@ -55,7 +55,7 @@ from results.metrics_collector import collect  # noqa: E402
 from k8s.work_model import WORK_MODEL_VERSION  # noqa: E402
 
 
-PLAN_SCHEMA_VERSION = "1.0"
+PLAN_SCHEMA_VERSION = "1.1"
 DEFAULT_PLAN = Path(__file__).with_name("scenarios.yaml")
 SCHEDULE_SCHEMA_VERSION = 2
 DEFAULT_SCHEDULER_DEPLOYMENT = "ml-ai-scheduler-ml-ai-scheduler"
@@ -102,7 +102,15 @@ def expand_plan(path: Path = DEFAULT_PLAN, *, include_adaptive: bool = False) ->
         raise ValueError("load_profiles is missing")
     for name, implementation in LOAD_PROFILES.items():
         declared = declared_load_profiles.get(name)
-        if not isinstance(declared, Mapping) or declared.get("feature_scales") != implementation["feature_scales"]:
+        declared_contract = (
+            {key: value for key, value in declared.items() if key != "description"}
+            if isinstance(declared, Mapping)
+            else None
+        )
+        implementation_contract = {
+            key: value for key, value in implementation.items() if key != "description"
+        }
+        if declared_contract != implementation_contract:
             raise ValueError(f"plan load profile {name!r} has drifted from workload generation")
     profiles = document.get("profiles")
     if not isinstance(profiles, Mapping):

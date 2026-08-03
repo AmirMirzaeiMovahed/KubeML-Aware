@@ -25,7 +25,7 @@ import random
 import re
 import shutil
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
@@ -42,7 +42,7 @@ from k8s.work_model import (  # noqa: E402
 from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
 
 
-WORKLOAD_SCHEMA_VERSION = "1.0"
+WORKLOAD_SCHEMA_VERSION = "1.1"
 OUTPUT_SENTINEL = ".ml-scheduler-workload"
 FEATURE_NAMES = ("T", "R", "M", "G", "C", "P")
 
@@ -79,16 +79,27 @@ CATEGORY_WEIGHTS = {
 LOAD_PROFILES: Dict[str, Dict[str, Any]] = {
     "normal": {
         "feature_scales": {},
+        "target_estimated_work_ratio": 1.0,
+        "calibration_feature": None,
+        "calibration_method": "identity",
         "description": "Article normal-load profile; sampled features are unchanged.",
     },
     "half": {
-        "feature_scales": {"M": 0.5},
+        "feature_scales": {},
+        "target_estimated_work_ratio": 0.5,
+        "calibration_feature": "M",
+        "calibration_method": "deterministic-global-bisection-v1",
         "description": (
-            "Article half-load profile: matrix dimension M is halved; "
-            "R, G, C, and P are unchanged and T is re-estimated from them and M."
+            "Article half-load profile: one deterministic global M scale targets "
+            "50% aggregate estimated physical work; R, G, C, and P are unchanged "
+            "and T is re-estimated."
         ),
     },
 }
+
+HALF_LOAD_TARGET_RATIO = 0.5
+HALF_LOAD_RATIO_TOLERANCE = 0.01
+HALF_LOAD_CALIBRATION_ITERATIONS = 80
 
 LABEL_KEYS = {
     "run_id": "ml.scheduler/run-id",
@@ -196,6 +207,92 @@ def category_for_job(job: JobFeatures) -> str:
     return prefix
 
 
+def estimated_burst_seconds(jobs: Sequence[JobFeatures]) -> float:
+    if not jobs:
+        raise ValueError("jobs must not be empty")
+    return sum(
+        estimate_work(
+            R=job.R,
+            M=int(job.M),
+            G=job.G,
+            C=int(job.C),
+            P=int(job.P),
+        ).estimated_training_seconds
+        for job in jobs
+    )
+
+
+def calibrate_half_load(
+    jobs: Sequence[JobFeatures],
+    *,
+    target_ratio: float = HALF_LOAD_TARGET_RATIO,
+) -> tuple[List[JobFeatures], Dict[str, Any]]:
+    """Scale M globally so aggregate versioned work is as close as possible to 50%."""
+
+    if not jobs:
+        raise ValueError("jobs must not be empty")
+    if not math.isfinite(target_ratio) or not 0 < target_ratio < 1:
+        raise ValueError("target_ratio must be finite and in (0, 1)")
+    baseline_seconds = estimated_burst_seconds(jobs)
+    target_seconds = baseline_seconds * target_ratio
+    minimum_scale = max(float(job.P) / float(job.M) for job in jobs)
+
+    def candidate(scale: float) -> tuple[List[JobFeatures], float]:
+        scaled_jobs: List[JobFeatures] = []
+        for job in jobs:
+            matrix_dimension = max(int(job.P), round(float(job.M) * scale))
+            estimate = estimate_work(
+                R=job.R,
+                M=matrix_dimension,
+                G=job.G,
+                C=int(job.C),
+                P=int(job.P),
+            )
+            scaled_jobs.append(
+                replace(
+                    job,
+                    M=matrix_dimension,
+                    T=round(estimate.estimated_training_seconds, 6),
+                )
+            )
+        return scaled_jobs, estimated_burst_seconds(scaled_jobs)
+
+    low, high = minimum_scale, 1.0
+    candidates: List[tuple[float, List[JobFeatures], float]] = []
+    for scale in (low, high):
+        scaled_jobs, seconds = candidate(scale)
+        candidates.append((scale, scaled_jobs, seconds))
+    for _ in range(HALF_LOAD_CALIBRATION_ITERATIONS):
+        middle = (low + high) / 2.0
+        scaled_jobs, seconds = candidate(middle)
+        candidates.append((middle, scaled_jobs, seconds))
+        if seconds < target_seconds:
+            low = middle
+        else:
+            high = middle
+
+    selected_scale, scaled_jobs, adjusted_seconds = min(
+        candidates,
+        key=lambda item: (abs(item[2] - target_seconds), -item[0]),
+    )
+    achieved_ratio = adjusted_seconds / baseline_seconds
+    evidence = {
+        "method": LOAD_PROFILES["half"]["calibration_method"],
+        "work_model_version": WORK_MODEL_VERSION,
+        "scaled_feature": "M",
+        "selected_scale": selected_scale,
+        "target_estimated_work_ratio": target_ratio,
+        "achieved_estimated_work_ratio": achieved_ratio,
+        "absolute_ratio_error": abs(achieved_ratio - target_ratio),
+        "ratio_tolerance": HALF_LOAD_RATIO_TOLERANCE,
+        "within_tolerance": abs(achieved_ratio - target_ratio)
+        <= HALF_LOAD_RATIO_TOLERANCE,
+        "baseline_estimated_seconds": baseline_seconds,
+        "adjusted_estimated_seconds": adjusted_seconds,
+    }
+    return scaled_jobs, evidence
+
+
 def generate_burst(n_jobs: int, seed: Optional[int] = None, load: str = "normal") -> List[JobFeatures]:
     """Generate a deterministic category-weighted burst.
 
@@ -214,26 +311,46 @@ def generate_burst(n_jobs: int, seed: Optional[int] = None, load: str = "normal"
     rng = random.Random(actual_seed)
     categories = list(CATEGORY_WEIGHTS)
     weights = [CATEGORY_WEIGHTS[name] for name in categories]
-    scales = LOAD_PROFILES[load]["feature_scales"]
-
     jobs: List[JobFeatures] = []
     for index in range(n_jobs):
         category = rng.choices(categories, weights=weights, k=1)[0]
         job = _sample_category(category, rng, seed=actual_seed, index=index)
-        for feature, scale in scales.items():
-            scaled = float(getattr(job, feature)) * float(scale)
-            # M is a matrix dimension and must remain an integer accepted by train.py.
-            setattr(job, feature, max(1, int(round(scaled))) if feature == "M" else round(scaled, 4))
-        estimate = estimate_work(
-            R=job.R, M=int(job.M), G=job.G, C=int(job.C), P=int(job.P)
-        )
-        job.T = round(estimate.estimated_training_seconds, 6)
         _validate_job(job)
         jobs.append(job)
+
+    if load == "half":
+        jobs, _evidence = calibrate_half_load(jobs)
 
     if len({job.job_id for job in jobs}) != len(jobs):
         raise RuntimeError("deterministic job ID collision")
     return jobs
+
+
+def load_profile_evidence(
+    jobs: Sequence[JobFeatures], *, seed: int, load: str
+) -> Dict[str, Any]:
+    if load == "normal":
+        total = estimated_burst_seconds(jobs)
+        return {
+            "method": "identity",
+            "work_model_version": WORK_MODEL_VERSION,
+            "selected_scale": 1.0,
+            "target_estimated_work_ratio": 1.0,
+            "achieved_estimated_work_ratio": 1.0,
+            "absolute_ratio_error": 0.0,
+            "ratio_tolerance": 0.0,
+            "within_tolerance": True,
+            "baseline_estimated_seconds": total,
+            "adjusted_estimated_seconds": total,
+        }
+
+    normal_jobs = generate_burst(len(jobs), seed=seed, load="normal")
+    expected_half, evidence = calibrate_half_load(normal_jobs)
+    observed = [asdict(job) for job in jobs]
+    expected = [asdict(job) for job in expected_half]
+    if observed != expected:
+        raise ValueError("half-load jobs do not match deterministic calibration evidence")
+    return evidence
 
 
 def build_workload_document(
@@ -260,6 +377,7 @@ def build_workload_document(
             "load_profile": load,
         },
         "profile": LOAD_PROFILES[load],
+        "load_calibration": load_profile_evidence(jobs, seed=seed, load=load),
         "sampling_assumptions": {
             "category_ranges": CATEGORY_RANGES,
             "category_weights": CATEGORY_WEIGHTS,

@@ -17,6 +17,8 @@ from workload.generate_workload import (
     LABEL_KEYS,
     OUTPUT_SENTINEL,
     _sample_category,
+    build_workload_document,
+    estimated_burst_seconds,
     generate_burst,
     prepare_output_directory,
     to_pod_yaml,
@@ -48,7 +50,7 @@ def test_half_profile_scales_matrix_and_reestimates_duration():
     half = generate_burst(40, seed=987, load="half")
     for full_job, half_job in zip(normal, half):
         assert full_job.job_id == half_job.job_id
-        assert half_job.M == max(1, int(round(full_job.M * 0.5)))
+        assert half_job.P <= half_job.M <= full_job.M
         for feature in ("R", "G", "C", "P"):
             assert getattr(half_job, feature) == getattr(full_job, feature)
         expected = estimate_work(
@@ -60,6 +62,25 @@ def test_half_profile_scales_matrix_and_reestimates_duration():
         )
         assert half_job.T == round(expected.estimated_training_seconds, 6)
         assert half_job.T < full_job.T
+    ratio = estimated_burst_seconds(half) / estimated_burst_seconds(normal)
+    assert ratio == pytest.approx(0.5, abs=0.01)
+
+
+def test_workload_document_records_half_load_calibration():
+    jobs = generate_burst(48, seed=1000, load="half")
+    document = build_workload_document(
+        jobs,
+        seed=1000,
+        load="half",
+        run_id="half-run",
+        scenario="48-half",
+        repetition=0,
+    )
+    calibration = document["load_calibration"]
+    assert calibration["method"] == "deterministic-global-bisection-v1"
+    assert calibration["work_model_version"] == WORK_MODEL_VERSION
+    assert calibration["within_tolerance"] is True
+    assert calibration["achieved_estimated_work_ratio"] == pytest.approx(0.5, abs=0.01)
 
 
 def test_sampled_duration_is_derived_from_the_shared_work_model():
