@@ -28,14 +28,10 @@ PACING_CONFIG_ORDER = (
 COLORS = {
     "default": "#e67e22",
     "custom-baseline": "#3498db",
-    "custom-adaptive": "#2ecc71",
-    "reversed": "#c0392b",
 }
 LABELS = {
     "default": "Default Scheduler",
     "custom-baseline": "Custom (article baseline, delay=0s)",
-    "custom-adaptive": "Custom + Adaptive Pacing",
-    "reversed": "Reversed order (ablation)",
 }
 
 
