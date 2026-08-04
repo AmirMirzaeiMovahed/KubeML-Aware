@@ -17,6 +17,7 @@ scheduler:
   expectedCount: 0
   quietPeriodSeconds: 1.5
   burstTimeoutSeconds: 60
+  pollIntervalSeconds: 0.5
   executionTimeoutSeconds: 120
   maxWaitSeconds: 90
   metricsMaxAgeSeconds: 30

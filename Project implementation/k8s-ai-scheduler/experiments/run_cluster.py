@@ -752,6 +752,83 @@ def _argument_value(arguments: Sequence[str], name: str) -> Optional[str]:
     return arguments[index + 1] if index + 1 < len(arguments) else None
 
 
+SCHEDULER_RUNTIME_ARGUMENTS = {
+    "--quiet-period": "quietPeriodSeconds",
+    "--burst-timeout": "burstTimeoutSeconds",
+    "--poll-interval": "pollIntervalSeconds",
+    "--execution-timeout": "executionTimeoutSeconds",
+    "--api-timeout": "apiTimeoutSeconds",
+    "--cpu-threshold": "cpuThreshold",
+    "--adaptive-hysteresis": "adaptiveHysteresis",
+    "--max-wait": "maxWaitSeconds",
+    "--metrics-max-age": "metricsMaxAgeSeconds",
+}
+
+SCHEDULER_RUNTIME_METADATA = {
+    "quiet_period_seconds": "quietPeriodSeconds",
+    "burst_timeout_seconds": "burstTimeoutSeconds",
+    "poll_interval_seconds": "pollIntervalSeconds",
+    "execution_timeout_seconds": "executionTimeoutSeconds",
+    "api_timeout_seconds": "apiTimeoutSeconds",
+    "cpu_threshold": "cpuThreshold",
+    "adaptive_hysteresis": "adaptiveHysteresis",
+    "max_wait_seconds": "maxWaitSeconds",
+    "metrics_max_age_seconds": "metricsMaxAgeSeconds",
+}
+
+
+def validate_scheduler_argument_contract(
+    arguments: Sequence[str],
+    scheduler_values: Mapping[str, Any],
+    *,
+    target_node: str,
+    results_template: str,
+) -> None:
+    """Fail when the live Deployment differs from computed Helm values."""
+
+    expected_strings = {
+        "--scheduler-name": scheduler_values.get("name"),
+        "--target-node": scheduler_values.get("targetNode"),
+        "--results": scheduler_values.get("resultsPath"),
+    }
+    if expected_strings["--target-node"] != target_node:
+        raise ClusterRunError("computed Helm target node differs from --target-node")
+    if expected_strings["--results"] != results_template:
+        raise ClusterRunError("computed Helm results path differs from runner")
+    for argument, expected in expected_strings.items():
+        actual = _argument_value(arguments, argument)
+        if not isinstance(expected, str) or not expected or actual != expected:
+            raise ClusterRunError(
+                f"live scheduler argument {argument}={actual!r} differs from "
+                f"computed Helm value {expected!r}"
+            )
+    for argument, value_key in SCHEDULER_RUNTIME_ARGUMENTS.items():
+        actual = _argument_value(arguments, argument)
+        expected = scheduler_values.get(value_key)
+        try:
+            matches = math.isclose(
+                float(actual), float(expected), rel_tol=0.0, abs_tol=1e-12
+            )
+        except (TypeError, ValueError):
+            matches = False
+        if not matches:
+            raise ClusterRunError(
+                f"live scheduler argument {argument}={actual!r} differs from "
+                f"computed Helm {value_key}={expected!r}"
+            )
+    actual_retries = _argument_value(arguments, "--api-retries")
+    expected_retries = scheduler_values.get("apiRetries")
+    try:
+        retries_match = int(actual_retries) == int(expected_retries)
+    except (TypeError, ValueError):
+        retries_match = False
+    if not retries_match:
+        raise ClusterRunError(
+            f"live scheduler argument --api-retries={actual_retries!r} differs "
+            f"from computed Helm apiRetries={expected_retries!r}"
+        )
+
+
 def verify_scheduler_deployment(
     kubectl: Kubectl,
     *,
@@ -761,6 +838,7 @@ def verify_scheduler_deployment(
     target_node: str,
     results_template: str,
     require_metrics: bool,
+    scheduler_values: Mapping[str, Any],
 ) -> Dict[str, Any]:
     kubectl.run(
         "rollout", "status", f"deployment/{deployment_name}", "-n", namespace,
@@ -786,6 +864,14 @@ def verify_scheduler_deployment(
     arguments = [str(value) for value in (container.get("args") or [])]
     if "scheduler.custom_scheduler" not in arguments:
         raise ClusterRunError("installed controller is not the reproduction custom scheduler")
+    if scheduler_values.get("name") != "ml-aware-scheduler":
+        raise ClusterRunError("computed Helm scheduler name is not ml-aware-scheduler")
+    validate_scheduler_argument_contract(
+        arguments,
+        scheduler_values,
+        target_node=target_node,
+        results_template=results_template,
+    )
     if _argument_value(arguments, "--scheduler-name") != "ml-aware-scheduler":
         raise ClusterRunError("installed reproduction scheduler name is not ml-aware-scheduler")
     if _argument_value(arguments, "--target-node") != target_node:
@@ -1054,6 +1140,40 @@ def validate_scheduler_record(
             errors.append("scheduler fixed delay differs from plan")
     except (TypeError, ValueError):
         errors.append("scheduler fixed delay is invalid")
+
+    runtime_values = (
+        (((
+            (result_document.get("environment") or {}).get("cluster_snapshot")
+            or {}
+        ).get("helm") or {}).get("computed_values") or {}).get("scheduler")
+        or {}
+    )
+    if not isinstance(runtime_values, Mapping):
+        runtime_values = {}
+    if metadata.get("runtime_contract_version") != "1.0":
+        errors.append("scheduler runtime contract version is missing or unsupported")
+    for metadata_field, helm_field in SCHEDULER_RUNTIME_METADATA.items():
+        observed = metadata.get(metadata_field)
+        expected = runtime_values.get(helm_field)
+        try:
+            matches = math.isclose(
+                float(observed), float(expected), rel_tol=0.0, abs_tol=1e-12
+            )
+        except (TypeError, ValueError):
+            matches = False
+        if not matches:
+            errors.append(
+                f"scheduler runtime {metadata_field}={observed!r} differs "
+                f"from Helm {helm_field}={expected!r}"
+            )
+    try:
+        retries_match = int(metadata.get("api_retries")) == int(
+            runtime_values.get("apiRetries")
+        )
+    except (TypeError, ValueError):
+        retries_match = False
+    if not retries_match:
+        errors.append("scheduler runtime api_retries differs from Helm")
 
     records = schedule.get("records")
     if not isinstance(records, list) or len(records) != spec.jobs:
@@ -1892,6 +2012,17 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             raise ClusterRunError(
                 f"image pull Secret {secret_name!r} has unexpected type {secret.get('type')!r}"
             )
+    helm_environment = capture_and_verify_helm_release(
+        executable=args.helm,
+        release=args.helm_release,
+        namespace=args.namespace,
+        kube_context=args.context,
+        target_node=args.target_node,
+        require_metrics=args.include_adaptive,
+    )
+    scheduler_values = (
+        (helm_environment.get("computed_values") or {}).get("scheduler") or {}
+    )
     deployment = verify_scheduler_deployment(
         kubectl,
         namespace=args.namespace,
@@ -1900,14 +2031,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         target_node=args.target_node,
         results_template=args.scheduler_results_template,
         require_metrics=args.include_adaptive,
-    )
-    helm_environment = capture_and_verify_helm_release(
-        executable=args.helm,
-        release=args.helm_release,
-        namespace=args.namespace,
-        kube_context=args.context,
-        target_node=args.target_node,
-        require_metrics=args.include_adaptive,
+        scheduler_values=scheduler_values,
     )
     _ensure_clean_cluster(kubectl, args.namespace)
     minikube_profile = args.minikube_profile or args.context or "minikube"

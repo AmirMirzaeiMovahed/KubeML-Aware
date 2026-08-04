@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 
 
 class ConfigurationError(ValueError):
@@ -33,6 +33,23 @@ class SchedulerConfig:
     results_path: str = "../results/schedule_run.json"
     health_host: str = "0.0.0.0"
     health_port: int = 8080
+
+    def runtime_metadata(self) -> Dict[str, object]:
+        """Return the non-secret runtime contract persisted with every run."""
+
+        return {
+            "runtime_contract_version": "1.0",
+            "quiet_period_seconds": self.quiet_period,
+            "burst_timeout_seconds": self.burst_timeout,
+            "poll_interval_seconds": self.poll_interval,
+            "execution_timeout_seconds": self.execution_timeout,
+            "api_timeout_seconds": self.api_timeout,
+            "api_retries": self.api_retries,
+            "cpu_threshold": self.cpu_threshold,
+            "adaptive_hysteresis": self.adaptive_hysteresis,
+            "max_wait_seconds": self.max_wait,
+            "metrics_max_age_seconds": self.metrics_max_age,
+        }
 
     def validate(self, *, manual_binding: bool = False) -> "SchedulerConfig":
         if not self.scheduler_name.strip():

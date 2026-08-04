@@ -24,6 +24,7 @@ from experiments.run_cluster import (
     plan_document,
     probe_scheduler_run,
     validate_result_for_spec,
+    validate_scheduler_argument_contract,
     validate_scheduler_record,
 )
 from experiments.schema import make_result_document
@@ -31,6 +32,41 @@ from experiments.statistics import paired_effect_table
 from k8s.work_model import WORK_MODEL_VERSION
 
 TRAINER_IMAGE = "registry.example/ml-sim@sha256:" + "a" * 64
+
+
+def _scheduler_values():
+    return {
+        "name": "ml-aware-scheduler",
+        "targetNode": "node-a",
+        "resultsPath": "/results/schedule-{run_id}.json",
+        "quietPeriodSeconds": 1.5,
+        "burstTimeoutSeconds": 60,
+        "pollIntervalSeconds": 0.5,
+        "executionTimeoutSeconds": 120,
+        "apiTimeoutSeconds": 10,
+        "apiRetries": 4,
+        "cpuThreshold": 0.85,
+        "adaptiveHysteresis": 0.05,
+        "maxWaitSeconds": 90,
+        "metricsMaxAgeSeconds": 30,
+    }
+
+
+def _runtime_metadata():
+    values = _scheduler_values()
+    return {
+        "runtime_contract_version": "1.0",
+        "quiet_period_seconds": values["quietPeriodSeconds"],
+        "burst_timeout_seconds": values["burstTimeoutSeconds"],
+        "poll_interval_seconds": values["pollIntervalSeconds"],
+        "execution_timeout_seconds": values["executionTimeoutSeconds"],
+        "api_timeout_seconds": values["apiTimeoutSeconds"],
+        "api_retries": values["apiRetries"],
+        "cpu_threshold": values["cpuThreshold"],
+        "adaptive_hysteresis": values["adaptiveHysteresis"],
+        "max_wait_seconds": values["maxWaitSeconds"],
+        "metrics_max_age_seconds": values["metricsMaxAgeSeconds"],
+    }
 
 
 def _audit_snapshot():
@@ -61,7 +97,10 @@ def _audit_snapshot():
     return {
         "target_node": {"name": "node-a"},
         "kubernetes_version": {},
-        "helm": {"version": "test"},
+        "helm": {
+            "version": "test",
+            "computed_values": {"scheduler": _scheduler_values()},
+        },
         "reproduction_policy": {
             "profile": "article-exact",
             "article_claim_eligible": True,
@@ -404,6 +443,7 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                     "pacing_mode": spec.pacing_mode,
                     "fixed_delay": spec.fixed_delay_seconds,
                     "reverse": spec.reverse,
+                    **_runtime_metadata(),
                 },
                 "records": [
                         {
@@ -428,6 +468,7 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
     assert report["pairing_keys"] == ["scenario", "repetition", "seed"]
     assert report["paired_effects"]
     assert report["article_reference"]["acceptance_threshold"] is None
+    assert report["article_reference"]["comparison_rows"] == 54
     assert (tmp_path / "analysis" / "aggregate_metrics.csv").is_file()
     assert (tmp_path / "analysis" / "paired_effects.csv").is_file()
     assert (tmp_path / "analysis" / "article_reference_comparison.csv").is_file()
@@ -462,6 +503,11 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
         seed=spec.seed,
         expected_jobs=1,
         source="kubernetes",
+        environment={
+            "cluster_snapshot": {
+                "helm": {"computed_values": {"scheduler": _scheduler_values()}}
+            }
+        },
         jobs=[{
             "job_id": "job-a",
             "category": "test",
@@ -489,6 +535,7 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
             "pacing_mode": "none",
             "fixed_delay": 0.0,
             "reverse": False,
+            **_runtime_metadata(),
         },
         "records": [{
             "job_id": "job-a",
@@ -507,6 +554,39 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
     schedule["records"][0]["rank"] = 0.1
     with pytest.raises(ClusterRunError, match="rank differs"):
         validate_scheduler_record(spec, schedule, result, target_node="node-a")
+
+
+def test_live_scheduler_arguments_must_match_computed_helm_values():
+    values = _scheduler_values()
+    arguments = [
+        "--scheduler-name", values["name"],
+        "--target-node", values["targetNode"],
+        "--results", values["resultsPath"],
+        "--quiet-period", str(values["quietPeriodSeconds"]),
+        "--burst-timeout", str(values["burstTimeoutSeconds"]),
+        "--poll-interval", str(values["pollIntervalSeconds"]),
+        "--execution-timeout", str(values["executionTimeoutSeconds"]),
+        "--api-timeout", str(values["apiTimeoutSeconds"]),
+        "--api-retries", str(values["apiRetries"]),
+        "--cpu-threshold", str(values["cpuThreshold"]),
+        "--adaptive-hysteresis", str(values["adaptiveHysteresis"]),
+        "--max-wait", str(values["maxWaitSeconds"]),
+        "--metrics-max-age", str(values["metricsMaxAgeSeconds"]),
+    ]
+    validate_scheduler_argument_contract(
+        arguments,
+        values,
+        target_node="node-a",
+        results_template="/results/schedule-{run_id}.json",
+    )
+    arguments[arguments.index("--quiet-period") + 1] = "9"
+    with pytest.raises(ClusterRunError, match="--quiet-period"):
+        validate_scheduler_argument_contract(
+            arguments,
+            values,
+            target_node="node-a",
+            results_template="/results/schedule-{run_id}.json",
+        )
 
 
 def test_resume_validation_rejects_result_from_different_plan():

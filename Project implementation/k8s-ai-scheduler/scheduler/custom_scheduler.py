@@ -14,7 +14,7 @@ import os
 import signal
 import sys
 import time
-from typing import Any, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -459,6 +459,20 @@ class MLAwareScheduler:
         safe = "".join(char if char.isalnum() or char in "-_." else "_" for char in run_id)
         return f"{root}-{safe}{extension or '.json'}"
 
+    def _record_metadata(self, settings: RunSettings) -> Dict[str, object]:
+        return {
+            "profile": "article-manual-bind",
+            "run_id": settings.run_id,
+            "expected_count": settings.expected_count,
+            "scheduler_name": self.config.scheduler_name,
+            "namespace": self.config.namespace,
+            "target_node": self.node_name,
+            "pacing_mode": settings.pacing_mode,
+            "fixed_delay": settings.fixed_delay,
+            "reverse": settings.reverse,
+            **self.config.runtime_metadata(),
+        }
+
     def process_run(self, settings: RunSettings, *, one_shot: bool = False) -> List[ScheduleRecord]:
         self.metrics.inc("ml_scheduler_bursts_total")
         self.logger.info(
@@ -481,17 +495,7 @@ class MLAwareScheduler:
         )
         store = AtomicRecordStore(
             self._results_path(settings.run_id, one_shot=one_shot),
-            metadata={
-                "profile": "article-manual-bind",
-                "run_id": settings.run_id,
-                "expected_count": settings.expected_count,
-                "scheduler_name": self.config.scheduler_name,
-                "namespace": self.config.namespace,
-                "target_node": self.node_name,
-                "pacing_mode": settings.pacing_mode,
-                "fixed_delay": settings.fixed_delay,
-                "reverse": settings.reverse,
-            },
+            metadata=self._record_metadata(settings),
         )
         store.initialize()
         store.set_status("running")
@@ -623,17 +627,7 @@ class MLAwareScheduler:
     ) -> None:
         path = self._results_path(settings.run_id, one_shot=one_shot)
         if not os.path.exists(path):
-            store = AtomicRecordStore(path, metadata={
-                "profile": "article-manual-bind",
-                "run_id": settings.run_id,
-                "expected_count": settings.expected_count,
-                "scheduler_name": self.config.scheduler_name,
-                "namespace": self.config.namespace,
-                "target_node": self.node_name,
-                "pacing_mode": settings.pacing_mode,
-                "fixed_delay": settings.fixed_delay,
-                "reverse": settings.reverse,
-            })
+            store = AtomicRecordStore(path, metadata=self._record_metadata(settings))
             store.initialize()
             store.set_status("failed", str(exc))
             self.metrics.inc(

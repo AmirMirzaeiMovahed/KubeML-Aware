@@ -83,6 +83,8 @@ spec:
             - {{ .Values.scheduler.quietPeriodSeconds | quote }}
             - "--burst-timeout"
             - {{ .Values.scheduler.burstTimeoutSeconds | quote }}
+            - "--poll-interval"
+            - {{ .Values.scheduler.pollIntervalSeconds | quote }}
             - "--api-timeout"
             - {{ .Values.scheduler.apiTimeoutSeconds | quote }}
             - "--api-retries"

@@ -219,6 +219,7 @@ class SchedulingGateController:
             "pacing_mode": settings.pacing_mode,
             "fixed_delay": settings.fixed_delay,
             "reverse": settings.reverse,
+            **self.config.runtime_metadata(),
         }
 
     def _persisted_candidate_status(

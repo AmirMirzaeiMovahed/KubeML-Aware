@@ -51,6 +51,7 @@
         "expectedCount": {"type": "integer", "minimum": 0},
         "quietPeriodSeconds": {"type": "number", "exclusiveMinimum": 0},
         "burstTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "pollIntervalSeconds": {"type": "number", "exclusiveMinimum": 0},
         "executionTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
         "apiTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
         "apiRetries": {"type": "integer", "minimum": 0},
