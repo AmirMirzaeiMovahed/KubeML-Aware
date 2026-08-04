@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from experiments.analyze import _mean_ci95, analyze, paired_improvement_table
+from experiments.analyze import _mean_ci95, analyze
 from experiments.controls import execution_controls_contract
 from experiments.run_cluster import (
     DEFAULT_PLAN,
@@ -22,6 +22,7 @@ from experiments.run_cluster import (
     validate_scheduler_record,
 )
 from experiments.schema import make_result_document
+from experiments.statistics import paired_effect_table
 from k8s.work_model import WORK_MODEL_VERSION
 
 TRAINER_IMAGE = "registry.example/ml-sim@sha256:" + "a" * 64
@@ -173,12 +174,16 @@ def test_confidence_interval_surrounds_mean():
     assert lower < mean < upper
 
 
-def test_scheduler_effects_use_paired_differences_and_confidence_intervals():
+def test_article_effects_use_correct_paired_references_and_confidence_intervals():
     rows = []
-    for repetition, (baseline, candidate) in enumerate(
-        [(10.0, 8.0), (20.0, 10.0), (40.0, 20.0)]
+    for repetition, (default, intended, reversed_jct) in enumerate(
+        [(10.0, 8.0, 12.0), (20.0, 10.0, 15.0), (40.0, 20.0, 30.0)]
     ):
-        for config, avg_jct in (("default", baseline), ("custom-baseline", candidate)):
+        for config, avg_jct in (
+            ("default", default),
+            ("custom-baseline", intended),
+            ("reversed", reversed_jct),
+        ):
             rows.append({
                 "scenario": "48-normal",
                 "config": config,
@@ -187,17 +192,34 @@ def test_scheduler_effects_use_paired_differences_and_confidence_intervals():
                 "avg_jct": avg_jct,
                 "makespan": avg_jct * 2,
             })
-    paired = paired_improvement_table(pd.DataFrame(rows))
-    assert len(paired) == 1
-    result = paired.iloc[0]
-    assert result.pairs == 3
-    assert result.avg_jct_difference_mean == pytest.approx(32 / 3)
-    assert result.avg_jct_improvement_pct_mean == pytest.approx(40.0)
+    paired = paired_effect_table(pd.DataFrame(rows)).set_index("config")
+    assert len(paired) == 2
+    improvement = paired.loc["custom-baseline"]
+    assert improvement.reference_config == "default"
+    assert improvement.effect_kind == "improvement_vs_default"
+    assert improvement.pairs == 3
+    assert improvement.avg_jct_effect_mean == pytest.approx(32 / 3)
+    assert improvement.avg_jct_effect_pct_mean == pytest.approx(40.0)
     assert (
-        result.avg_jct_improvement_pct_ci95_low
-        < result.avg_jct_improvement_pct_mean
-        < result.avg_jct_improvement_pct_ci95_high
+        improvement.avg_jct_effect_pct_ci95_low
+        < improvement.avg_jct_effect_pct_mean
+        < improvement.avg_jct_effect_pct_ci95_high
     )
+    degradation = paired.loc["reversed"]
+    assert degradation.reference_config == "custom-baseline"
+    assert degradation.effect_kind == "degradation_vs_intended"
+    assert degradation.avg_jct_effect_mean == pytest.approx(19 / 3)
+    assert degradation.avg_jct_effect_pct_mean == pytest.approx(50.0)
+
+
+def test_paired_effects_reject_missing_reference_pair():
+    summary = pd.DataFrame([
+        {"scenario": "12-normal", "config": "default", "rep": 0, "seed": 1, "avg_jct": 10, "makespan": 12},
+        {"scenario": "12-normal", "config": "custom-baseline", "rep": 0, "seed": 1, "avg_jct": 8, "makespan": 10},
+        {"scenario": "12-normal", "config": "reversed", "rep": 1, "seed": 2, "avg_jct": 9, "makespan": 11},
+    ])
+    with pytest.raises(ValueError, match="unpaired runs"):
+        paired_effect_table(summary)
 
 
 def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
@@ -350,9 +372,9 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
     assert report["run_count"] == 70
     assert report["strictly_complete"] is True
     assert report["pairing_keys"] == ["scenario", "repetition", "seed"]
-    assert report["paired_improvements"]
+    assert report["paired_effects"]
     assert (tmp_path / "analysis" / "aggregate_metrics.csv").is_file()
-    assert (tmp_path / "analysis" / "paired_improvements.csv").is_file()
+    assert (tmp_path / "analysis" / "paired_effects.csv").is_file()
 
 
 def _one_job_spec(*, reverse=False, pacing_mode="none", fixed_delay=0.0):

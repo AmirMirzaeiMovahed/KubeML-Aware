@@ -16,7 +16,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = ROOT / "results"
-CONFIGS = ["default", "custom-baseline", "custom-adaptive", "reversed"]
+ARTICLE_FIGURE_CONFIGS = ("default", "custom-baseline")
 PACING_CONFIG_ORDER = (
     "default",
     "custom-baseline",
@@ -94,7 +94,9 @@ def plot_scenario(
     fig, (ax_ecdf, ax_bar) = plt.subplots(1, 2, figsize=(13, 5))
     summary = main_df[main_df.scenario == scenario_name]
     raw = raw_df[(raw_df.scenario == scenario_name) & (raw_df.status == "completed")]
-    available_configs = [config for config in CONFIGS if config in set(raw.config)]
+    available_configs = [
+        config for config in ARTICLE_FIGURE_CONFIGS if config in set(raw.config)
+    ]
     for config in available_configs:
         config_rows = raw[raw.config == config]
         grid, mean, lower, upper = mean_ecdf_iqr(config_rows)

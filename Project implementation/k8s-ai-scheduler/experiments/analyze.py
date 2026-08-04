@@ -21,7 +21,7 @@ from experiments.run_cluster import (  # noqa: E402
 )
 from experiments.schema import RESULT_SCHEMA_VERSION, validate_result_document  # noqa: E402
 from experiments.statistics import mean_ci95 as _mean_ci95  # noqa: E402
-from experiments.statistics import paired_improvement_table  # noqa: E402
+from experiments.statistics import paired_effect_table  # noqa: E402
 from sim.plot_results import plot_pacing_sweep, plot_scenario  # noqa: E402
 
 
@@ -157,7 +157,7 @@ def improvement_table(aggregated: pd.DataFrame) -> List[Dict[str, Any]]:
         if "default" not in subset.index:
             continue
         baseline = subset.loc["default"]
-        for config in ("custom-baseline", "custom-adaptive", "reversed"):
+        for config in ("custom-baseline", "custom-adaptive"):
             if config not in subset.index:
                 continue
             candidate = subset.loc[config]
@@ -198,8 +198,8 @@ def analyze(
     summary.to_csv(output_dir / "all_runs.csv", index=False)
     jobs.to_csv(output_dir / "all_jobs.csv", index=False)
     aggregate.to_csv(output_dir / "aggregate_metrics.csv", index=False)
-    paired_improvements = paired_improvement_table(summary)
-    paired_improvements.to_csv(output_dir / "paired_improvements.csv", index=False)
+    paired_effects = paired_effect_table(summary)
+    paired_effects.to_csv(output_dir / "paired_effects.csv", index=False)
 
     pacing = summary[summary.scenario == "48-half-pacing"]
     main = summary[summary.scenario != "48-half-pacing"]
@@ -221,11 +221,12 @@ def analyze(
         "missing_run_ids": missing,
         "strictly_complete": not missing,
         "improvements": improvements,
-        "paired_improvements": paired_improvements.to_dict(orient="records"),
+        "paired_effects": paired_effects.to_dict(orient="records"),
         "pairing_keys": ["scenario", "repetition", "seed"],
         "confidence_interval": (
             "Two-sided Student-t 95% CI over run-level metrics; scheduler "
-            "effects use within-scenario repetition/seed paired differences."
+            "effects use within-scenario repetition/seed paired differences. "
+            "Custom uses default as reference; reversed uses intended custom order."
         ),
         "ecdf_method": "Per-run ECDFs evaluated on a common grid; mean curve and 25th–75th percentile band across runs.",
     }

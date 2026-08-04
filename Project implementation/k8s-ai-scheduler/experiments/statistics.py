@@ -58,8 +58,15 @@ def mean_ci95(values: Sequence[float]) -> tuple[float, float, float]:
     return mean, mean - margin, mean + margin
 
 
-def paired_improvement_table(summary: pd.DataFrame) -> pd.DataFrame:
-    """Compute positive-is-better baseline-minus-candidate effects by seed pair."""
+def paired_effect_table(summary: pd.DataFrame) -> pd.DataFrame:
+    """Compute the article's paired scheduler and reversed-order effects.
+
+    Custom schedulers are improvements relative to ``default`` (reference
+    minus comparison for lower-is-better metrics).  The reversed ablation is a
+    degradation relative to the intended ``custom-baseline`` order (comparison
+    minus reference), matching the wording and denominator in the article.
+    Every effect is positive when it supports the corresponding claim.
+    """
 
     required = {
         "scenario",
@@ -77,23 +84,45 @@ def paired_improvement_table(summary: pd.DataFrame) -> pd.DataFrame:
     main = summary[summary.scenario != "48-half-pacing"]
     for scenario in sorted(main.scenario.unique()):
         scenario_rows = main[main.scenario == scenario]
-        baseline = scenario_rows[scenario_rows.config == "default"]
-        if baseline.empty:
-            continue
-        if baseline.duplicated(["rep", "seed"]).any():
-            raise ValueError(f"scenario {scenario!r} has duplicate default pairs")
-        candidates = sorted(set(scenario_rows.config) - {"default"})
-        for config in candidates:
-            candidate = scenario_rows[scenario_rows.config == config]
-            if candidate.duplicated(["rep", "seed"]).any():
+        configurations = set(scenario_rows.config)
+        comparisons = []
+        for config in sorted(configurations - {"default"}):
+            if config == "reversed":
+                comparisons.append(
+                    (config, "custom-baseline", "degradation_vs_intended", 1.0)
+                )
+            else:
+                comparisons.append((config, "default", "improvement_vs_default", -1.0))
+        for config, reference_config, effect_kind, direction in comparisons:
+            if reference_config not in configurations:
+                raise ValueError(
+                    f"scenario {scenario!r} requires reference {reference_config!r} "
+                    f"for comparison {config!r}"
+                )
+            reference = scenario_rows[scenario_rows.config == reference_config]
+            comparison = scenario_rows[scenario_rows.config == config]
+            pair_keys = ["rep", "seed"]
+            if reference.duplicated(pair_keys).any():
+                raise ValueError(
+                    f"scenario {scenario!r} has duplicate {reference_config!r} pairs"
+                )
+            if comparison.duplicated(pair_keys).any():
                 raise ValueError(
                     f"scenario {scenario!r} config {config!r} has duplicate pairs"
                 )
-            paired = baseline.merge(
-                candidate,
+            reference_keys = set(map(tuple, reference[pair_keys].to_numpy().tolist()))
+            comparison_keys = set(map(tuple, comparison[pair_keys].to_numpy().tolist()))
+            if reference_keys != comparison_keys:
+                raise ValueError(
+                    f"scenario {scenario!r} comparison {config!r} has unpaired runs: "
+                    f"reference_only={sorted(reference_keys - comparison_keys)}, "
+                    f"comparison_only={sorted(comparison_keys - reference_keys)}"
+                )
+            paired = reference.merge(
+                comparison,
                 on=["scenario", "rep", "seed"],
                 how="inner",
-                suffixes=("_default", "_candidate"),
+                suffixes=("_reference", "_comparison"),
                 validate="one_to_one",
             )
             if paired.empty:
@@ -101,32 +130,30 @@ def paired_improvement_table(summary: pd.DataFrame) -> pd.DataFrame:
             row: dict[str, Any] = {
                 "scenario": scenario,
                 "config": config,
-                "baseline_config": "default",
+                "reference_config": reference_config,
+                "effect_kind": effect_kind,
                 "pairs": len(paired),
-                "baseline_runs": len(baseline),
-                "candidate_runs": len(candidate),
+                "reference_runs": len(reference),
+                "comparison_runs": len(comparison),
             }
             for metric in ("avg_jct", "makespan"):
-                baseline_values = paired[f"{metric}_default"]
-                if (baseline_values <= 0).any():
+                reference_values = paired[f"{metric}_reference"]
+                comparison_values = paired[f"{metric}_comparison"]
+                if (reference_values <= 0).any():
                     raise ValueError(
-                        f"paired {metric} baseline must be > 0 for {scenario}/{config}"
+                        f"paired {metric} reference must be > 0 for {scenario}/{config}"
                     )
-                differences = (
-                    baseline_values - paired[f"{metric}_candidate"]
-                ).to_list()
+                effects = (direction * (comparison_values - reference_values)).to_list()
                 percentages = (
-                    100.0
-                    * (baseline_values - paired[f"{metric}_candidate"])
-                    / baseline_values
+                    100.0 * direction * (comparison_values - reference_values) / reference_values
                 ).to_list()
-                mean, lower, upper = mean_ci95(differences)
-                row[f"{metric}_difference_mean"] = mean
-                row[f"{metric}_difference_ci95_low"] = lower
-                row[f"{metric}_difference_ci95_high"] = upper
+                mean, lower, upper = mean_ci95(effects)
+                row[f"{metric}_effect_mean"] = mean
+                row[f"{metric}_effect_ci95_low"] = lower
+                row[f"{metric}_effect_ci95_high"] = upper
                 mean, lower, upper = mean_ci95(percentages)
-                row[f"{metric}_improvement_pct_mean"] = mean
-                row[f"{metric}_improvement_pct_ci95_low"] = lower
-                row[f"{metric}_improvement_pct_ci95_high"] = upper
+                row[f"{metric}_effect_pct_mean"] = mean
+                row[f"{metric}_effect_pct_ci95_low"] = lower
+                row[f"{metric}_effect_pct_ci95_high"] = upper
             rows.append(row)
     return pd.DataFrame(rows)

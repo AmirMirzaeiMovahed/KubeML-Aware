@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from scheduler.rank import JobFeatures
-from sim.plot_results import PACING_CONFIG_ORDER, mean_ecdf_iqr
+from sim.plot_results import ARTICLE_FIGURE_CONFIGS, PACING_CONFIG_ORDER, mean_ecdf_iqr
 from sim.run_experiments import SimulationSettings, main_comparison
 from sim.simulate import (
     SimulationIncompleteError,
@@ -84,6 +84,10 @@ def test_pacing_plot_order_contains_each_registered_configuration_once():
     )
 
 
+def test_article_figures_do_not_mix_in_extension_or_ablation_configs():
+    assert ARTICLE_FIGURE_CONFIGS == ("default", "custom-baseline")
+
+
 def test_simulation_outputs_paired_effects_and_exploratory_label(tmp_path):
     dataframe, _summary, documents, improvements = main_comparison(
         settings=SimulationSettings(dt=0.1),
@@ -93,7 +97,7 @@ def test_simulation_outputs_paired_effects_and_exploratory_label(tmp_path):
     )
     assert len(dataframe) == 9
     assert improvements["comparisons"]
-    assert (tmp_path / "paired_improvements.csv").is_file()
+    assert (tmp_path / "paired_effects.csv").is_file()
     assert all(
         document["environment"]["simulation"]["claim_eligibility"]
         == "exploratory-only"

@@ -93,7 +93,8 @@ retain independent run IDs.
 | ILT | consecutive execution-start timestamps | Sort timestamps; require complete marker set |
 | Mean ECDF over repetitions | interpolate each run ECDF on common grid | Do not pool jobs across repetitions |
 | IQR band | 25th/75th percentiles across run ECDFs | Plot and retain underlying numeric data |
-| Scheduler effect CI | paired baseline-minus-candidate differences by scenario/repetition/seed | Report Student-t 95% CI for absolute and percentage effects |
+| Scheduler improvement CI | paired default-minus-custom differences by scenario/repetition/seed | Report Student-t 95% CI for absolute and percentage effects |
+| Reversed ablation CI | paired reversed-minus-intended-custom differences using intended custom as denominator | Positive percentage means degradation, matching the article |
 | Reproducibility metadata | schema-versioned result records | Include seed, scenario, config, repetition, image digests, Kubernetes/node/tool versions |
 | Failure handling | strict collector | Any failed/missing/duplicate Pod invalidates the run |
 

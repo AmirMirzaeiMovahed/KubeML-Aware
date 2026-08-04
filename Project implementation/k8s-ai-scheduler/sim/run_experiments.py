@@ -31,7 +31,7 @@ from experiments.schema import (  # noqa: E402
     summarize_jobs,
     validate_result_document,
 )
-from experiments.statistics import paired_improvement_table  # noqa: E402
+from experiments.statistics import paired_effect_table  # noqa: E402
 from sim.calibration import load_calibrated_model  # noqa: E402
 from sim.simulate import (  # noqa: E402
     SimResult,
@@ -340,9 +340,9 @@ def main_comparison(
         ["avg_jct", "tail_jct_p95", "max_jct", "min_jct", "makespan", "avg_ilt"]
     ].mean()
 
-    paired = paired_improvement_table(dataframe)
-    paired.to_csv(output / "paired_improvements.csv", index=False)
-    improvements: Dict[str, Any] = {
+    paired = paired_effect_table(dataframe)
+    paired.to_csv(output / "paired_effects.csv", index=False)
+    effects: Dict[str, Any] = {
         "method": "within-scenario repetition/seed paired differences with Student-t 95% CI",
         "comparisons": paired.to_dict(orient="records"),
     }
@@ -352,10 +352,10 @@ def main_comparison(
         "source": "simulation",
         "settings": {**asdict(settings), "work_model": asdict(settings.work_model)},
         "claim_eligibility": "exploratory-only",
-        "improvements": improvements,
+        "effects": effects,
     }
     _atomic_json(output / "summary_metrics.json", summary_document)
-    return dataframe, summary, documents, improvements
+    return dataframe, summary, documents, effects
 
 
 def sensitivity_analysis(
