@@ -31,7 +31,7 @@ output is captured.
 - [x] Exact dependency versions import successfully and `python -m pip check`
       reports no broken requirements in the prepared local environment.
 - [x] `pyproject.toml`, `Chart.yaml`, and all four plain values files parse.
-- [x] `python -m pytest` passes: 121 passed, no skipped tests (local release
+- [x] `python -m pytest` passes: 126 passed, no skipped tests (local release
       candidate validation).
 - [x] `python -m ruff check .` passes with the repository-owned rule set.
 - [x] CI runs locked installs, lint, compile, tests, and plan validation on

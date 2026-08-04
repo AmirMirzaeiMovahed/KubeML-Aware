@@ -63,9 +63,9 @@
 Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 
 - Article 70 SHA-256:
-  `d1fd13b06d446e1360fcee0e37199811c64ec49f0fb687bba6d71bdda0817ae8`
+  `6076e7863c7b2507baf856c3f78750f594f834590847a0d1f403758b8bac4566`
 - Extended 90 SHA-256:
-  `c0a1f72dd626cfa8c83f096c78fcfd03c42a6787a141e04eb88e310d96866337`
+  `a383708fc9cecaec48d573716687a51d9ef9d379d5e9a932029e2487f688b52c`
 
 ## اندازه‌گیری و تحلیل
 
@@ -82,6 +82,7 @@ Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 | [x] | رد داده ناقص | Collector fail-closed و failure artifact | missing/failed/duplicate/mismatch رد می‌شود |
 | [x] | اثبات ترتیب واقعی | scheduler record در نتیجه custom embed و جداگانه archive می‌شود | rank/order/job set/timestamp/pacing دقیقاً validate می‌شود |
 | [x] | متادیتای بازتولید | Plan/artifact hash، context، Helm، Kubernetes، Node و image IDs | نبود یا mismatch باعث رد resume/analysis می‌شود |
+| [x] | قرارداد Runtime زمان‌بند | quiet/burst/poll/execution/API/adaptive از Helm به آرگومان Deployment و رکورد هر Run قفل شده‌اند | drift زنده یا mismatch رکورد با Helm باعث رد Run می‌شود |
 | [x] | کنترل cache/carryover | prewarm همان digest روی Node و cooldown تمیز ۳۰ ثانیه‌ای قبل هر run | شاهد Minikube Docker، BLAS، pressure و continuity داخل snapshot hash |
 
 ## Docker، امنیت و Kubernetes
@@ -105,7 +106,7 @@ Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 ## چک‌لیست Go/No-Go برای ادعای بازتولید مقاله
 
 - [x] الگوریتم، workload، Plan، schema، تست و manifests محلی کامل‌اند.
-- [x] 121 تست خودکار بدون skip یا failure پاس شده‌اند.
+- [x] 126 تست خودکار بدون skip یا failure پاس شده‌اند.
 - [x] Helm lint و schema سخت‌گیرانه Kubernetes 1.36 پاس شده است.
 - [x] Plan Lock دقیق 70 و 90 آماده است.
 - [ ] هر دو Docker image روی سرور build و smoke شوند.

@@ -32,7 +32,7 @@ image build, registry push, server-side dry run, or live deployment.
 | Exact dependency imports and `pip check` | Passed; no broken requirements |
 | Ruff quality gate | Passed repository-wide |
 | Python compile check | Passed for scheduler, workload, trainer, results, simulation, and experiments |
-| Automated tests | **121 passed**, zero skipped/failing |
+| Automated tests | **126 passed**, zero skipped/failing |
 | PowerShell parser validation | Passed |
 | Bash `-n` validation | Passed |
 | Helm values JSON Schema | Passed |
@@ -42,6 +42,7 @@ image build, registry push, server-side dry run, or live deployment.
 | Conditional RBAC inspection | Matrix includes Node Metrics read; fixed reproduction does not |
 | Helm negative cases | Missing target node, multiple replicas, `latest`, and invalid digest all rejected |
 | Dynamic Deployment contract | Digest rendering, custom scheduler module, target node, results template, and absence of fixed run filter verified |
+| Runtime drift contract | Live Deployment timing/API/adaptive arguments must equal computed Helm values; the same versioned contract is embedded in every scheduler record |
 | Deterministic workload materialization | A 48-Pod run was generated, reused after exact comparison, and strict-schema validated |
 | Workload Pod security | Non-root, read-only root, dropped capabilities, RuntimeDefault seccomp, disabled API token/service links, bounded `/tmp` verified |
 | Private-registry wiring | Workload manifests and `jobs.json` carry the configured pull Secret reference |
@@ -53,7 +54,7 @@ image build, registry push, server-side dry run, or live deployment.
 | Simulator smoke | Run/CSV/mean-ECDF/IQR plot generation passed; output remains proxy evidence only |
 | Simulator calibration | Content-addressed hardware benchmark CLI and tamper/stale-model rejection passed |
 | Paired inference | Default-minus-custom improvements and reversed-minus-intended degradations use paired Student-t 95% CIs by scenario/repetition/seed |
-| Published reference | Table I, Figures 2-4, and Section V-C aggregate claims are versioned and produce diagnostic observed deltas without an invented threshold |
+| Published reference | Table I, Figures 2-4, and Section V-C aggregate claims are versioned and produce 54 diagnostic observed-delta rows without an invented threshold |
 | Wheel build/install | Built, contents inspected, installed outside the source directory, resources and 70/90 plans imported successfully |
 | Release archives | Standard wheel and sdist built; checksum sidecar generated |
 | CI contract | Locked Python 3.11/3.12 tests plus Helm/package job committed |
