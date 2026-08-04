@@ -10,6 +10,7 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.service.type }}
+  publishNotReadyAddresses: {{ .Values.service.publishNotReadyAddresses }}
   selector:
     {{- include "ml-ai-scheduler.selectorLabels" . | nindent 4 }}
   ports:

@@ -9,6 +9,7 @@ from scheduler.pacing import (
     MetricsSample,
     Pacer,
     PacingError,
+    PacingInterrupted,
     RealClusterFeedback,
 )
 
@@ -55,6 +56,22 @@ def test_none_and_fixed_pacing_use_monotonic_deadline():
         sleep=clock.sleep,
     ).wait()
     assert clock.mono == pytest.approx(1.5)
+
+
+def test_pacing_stops_promptly_without_turning_shutdown_into_failure():
+    clock = FakeClock()
+    pacer = Pacer(
+        "fixed",
+        fixed_delay=5,
+        poll_interval=0.25,
+        monotonic=clock.monotonic,
+        wall_time=clock.wall_time,
+        sleep=clock.sleep,
+        stop_requested=lambda: clock.mono >= 0.5,
+    )
+    with pytest.raises(PacingInterrupted, match="shutdown"):
+        pacer.wait()
+    assert clock.mono == pytest.approx(0.5)
 
 
 def test_adaptive_requires_two_fresh_samples_below_hysteresis_watermark():

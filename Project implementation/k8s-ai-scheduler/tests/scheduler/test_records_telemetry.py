@@ -2,7 +2,9 @@ import io
 import json
 from urllib.request import urlopen
 
-from scheduler.records import AtomicRecordStore, ScheduleRecord
+import pytest
+
+from scheduler.records import AtomicRecordStore, RecordStoreError, ScheduleRecord
 from scheduler.telemetry import HealthServer, HealthState, JsonEventLogger, MetricsRegistry
 
 
@@ -10,7 +12,7 @@ def test_record_store_is_incremental_atomic_and_versioned(tmp_path):
     path = tmp_path / "run.json"
     store = AtomicRecordStore(str(path), {"run_id": "r1"})
     store.initialize()
-    record = ScheduleRecord("job-a", 1, 0.75)
+    record = ScheduleRecord("job-a", 1, 0.75, pod_uid="uid-job-a")
     store.upsert(record)
     record.status = "bound"
     record.bind_time = 123.0
@@ -19,7 +21,7 @@ def test_record_store_is_incremental_atomic_and_versioned(tmp_path):
     store.set_status("completed")
 
     document = json.loads(path.read_text(encoding="utf-8"))
-    assert document["schema_version"] == 2
+    assert document["schema_version"] == 3
     assert document["metadata"]["run_id"] == "r1"
     assert document["status"] == "completed"
     assert document["events"][0]["event"] == "pacing_wait_completed"
@@ -31,12 +33,35 @@ def test_record_store_is_incremental_atomic_and_versioned(tmp_path):
             "exec_start_time": None,
             "job_id": "job-a",
             "order": 1,
+            "pod_uid": "uid-job-a",
             "rank": 0.75,
             "release_time": None,
             "status": "bound",
         }
     ]
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_record_store_resumes_only_exact_versioned_state(tmp_path):
+    path = tmp_path / "resume.json"
+    original = AtomicRecordStore(str(path), {"run_id": "r1"})
+    original.initialize()
+    original.set_status("running")
+    original.upsert(ScheduleRecord("job-a", 1, 0.5, pod_uid="uid-a"))
+
+    resumed = AtomicRecordStore(str(path), {"run_id": "r1"})
+    assert resumed.load_existing() is True
+    assert resumed.status == "running"
+    assert resumed.records[0]["pod_uid"] == "uid-a"
+
+    with pytest.raises(RecordStoreError, match="metadata"):
+        AtomicRecordStore(str(path), {"run_id": "other"}).load_existing()
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["schema_version"] = 2
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(RecordStoreError, match="schema"):
+        AtomicRecordStore(str(path), {"run_id": "r1"}).load_existing()
 
 
 def test_json_logging_and_prometheus_rendering():

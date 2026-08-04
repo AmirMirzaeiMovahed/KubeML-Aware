@@ -117,10 +117,11 @@ The Helm chart includes:
 - conditional Node/metrics ClusterRole permissions;
 - non-root UID/GID 10001, read-only root filesystem, dropped capabilities,
   RuntimeDefault seccomp, resource requests/limits, and bounded `emptyDir`s;
-- optional results PVC/existing-claim support (disabled by default);
+- results PVC/existing-claim support, enabled by the production profile so
+  in-progress state survives Pod replacement;
 - startup/liveness `/livez`, readiness `/readyz`, and `/metrics` on port 8080;
-- ingress NetworkPolicy;
-- optional PDB and ServiceMonitor, both disabled by default;
+- ingress plus Kubernetes-API-port-only egress NetworkPolicy (optionally CIDR-bound);
+- PDB enabled by the production profile and an optional ServiceMonitor;
 - image pull-secret references and digest-based image selection.
 - a JSON Schema for Helm values and a dedicated dynamic matrix values file.
 
@@ -128,6 +129,12 @@ Ingress and HPA are intentionally absent: the controller has no public API,
 and multiple replicas are unsafe until leader election has been implemented
 and tested. Rollouts use `maxSurge: 0` to prevent old/new controller overlap,
 which deliberately introduces a short control-plane gap during upgrades.
+The production controller resumes a versioned atomic run record after restart,
+matches every Pod by name and UID, reconciles already-removed gates without a
+second release, and repeats an interrupted pacing delay conservatively. Gated
+manifests receive CPU/memory bounds and an explicit execution-container
+annotation. A stranded run makes `/readyz` fail while `/livez` and metrics stay
+reachable through the Service for diagnosis.
 
 ```powershell
 helm lint .\deploy\helm\ml-ai-scheduler

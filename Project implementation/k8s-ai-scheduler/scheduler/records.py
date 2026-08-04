@@ -11,11 +11,16 @@ from datetime import datetime, timezone
 from typing import Dict, List, Mapping, Optional
 
 
+class RecordStoreError(RuntimeError):
+    """Raised when persisted scheduler state is unsafe to resume."""
+
+
 @dataclass
 class ScheduleRecord:
     job_id: str
     order: int
     rank: float
+    pod_uid: Optional[str] = None
     status: str = "ranked"
     bind_time: Optional[float] = None
     release_time: Optional[float] = None
@@ -24,7 +29,8 @@ class ScheduleRecord:
 
 
 class AtomicRecordStore:
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
+    VALID_STATUSES = {"initializing", "running", "completed", "failed"}
 
     def __init__(self, path: str, metadata: Optional[Dict[str, object]] = None):
         self.path = os.path.abspath(path)
@@ -44,8 +50,66 @@ class AtomicRecordStore:
     def records(self) -> List[Dict[str, object]]:
         return list(self._document["records"])
 
+    @property
+    def events(self) -> List[Dict[str, object]]:
+        return list(self._document["events"])
+
+    @property
+    def status(self) -> str:
+        return str(self._document["status"])
+
+    @property
+    def metadata(self) -> Dict[str, object]:
+        return dict(self._document["metadata"])
+
     def initialize(self) -> None:
         self._write()
+
+    def load_existing(self) -> bool:
+        """Load and validate an existing state file without modifying it."""
+
+        with self._lock:
+            try:
+                with open(self.path, "r", encoding="utf-8") as handle:
+                    document = json.load(handle)
+            except FileNotFoundError:
+                return False
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RecordStoreError(
+                    f"scheduler state is unreadable: {self.path}: {exc}"
+                ) from exc
+            if not isinstance(document, dict):
+                raise RecordStoreError("scheduler state must be a JSON object")
+            if document.get("schema_version") != self.SCHEMA_VERSION:
+                raise RecordStoreError(
+                    "scheduler state schema is incompatible: "
+                    f"{document.get('schema_version')!r}"
+                )
+            if document.get("metadata") != self._document["metadata"]:
+                raise RecordStoreError("scheduler state metadata does not match the run")
+            if document.get("status") not in self.VALID_STATUSES:
+                raise RecordStoreError("scheduler state has an invalid status")
+            records = document.get("records")
+            events = document.get("events")
+            if not isinstance(records, list) or not isinstance(events, list):
+                raise RecordStoreError("scheduler state records/events must be arrays")
+            job_ids = []
+            for record in records:
+                if not isinstance(record, dict):
+                    raise RecordStoreError("scheduler state contains a non-object record")
+                job_id = record.get("job_id")
+                pod_uid = record.get("pod_uid")
+                if not isinstance(job_id, str) or not job_id:
+                    raise RecordStoreError("scheduler state record has no job_id")
+                if not isinstance(pod_uid, str) or not pod_uid:
+                    raise RecordStoreError(
+                        f"scheduler state record {job_id!r} has no pod_uid"
+                    )
+                job_ids.append(job_id)
+            if len(job_ids) != len(set(job_ids)):
+                raise RecordStoreError("scheduler state contains duplicate job records")
+            self._document = document
+            return True
 
     def set_status(self, status: str, error: Optional[str] = None) -> None:
         with self._lock:

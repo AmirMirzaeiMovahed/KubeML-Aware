@@ -87,6 +87,80 @@
         },
         "additionalProperties": false
       }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "required": ["enabled", "additionalIngressNamespaceSelectors", "egress"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "additionalIngressNamespaceSelectors": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "egress": {
+          "type": "object",
+          "required": ["enabled", "apiServerCIDRs", "apiServerPorts"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "apiServerCIDRs": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 3},
+              "uniqueItems": true
+            },
+            "apiServerPorts": {
+              "type": "array",
+              "items": {"type": "integer", "minimum": 1, "maximum": 65535},
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": ["type", "port", "publishNotReadyAddresses", "annotations"],
+      "properties": {
+        "type": {"type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"]},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "publishNotReadyAddresses": {"type": "boolean"},
+        "annotations": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "persistence": {
+      "type": "object",
+      "required": ["enabled", "existingClaim", "storageClass", "accessModes", "size", "annotations"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "existingClaim": {"type": "string"},
+        "storageClass": {"type": "string"},
+        "accessModes": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"]},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "size": {"type": "string", "minLength": 1},
+        "annotations": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "required": ["enabled", "minAvailable"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minAvailable": {
+          "oneOf": [
+            {"type": "integer", "minimum": 0},
+            {"type": "string", "pattern": "^[0-9]+%$"}
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

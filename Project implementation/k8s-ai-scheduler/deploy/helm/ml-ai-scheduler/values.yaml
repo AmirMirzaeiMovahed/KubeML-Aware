@@ -102,6 +102,9 @@ health:
 service:
   type: ClusterIP
   port: 8080
+  # Keep health/metrics discoverable while readiness truthfully reports a
+  # stranded or failed run.
+  publishNotReadyAddresses: true
   annotations: {}
 
 terminationGracePeriodSeconds: 30
@@ -122,6 +125,15 @@ networkPolicy:
   # Health and metrics are reachable from Pods in this namespace. Add
   # monitoring namespace labels below when a cross-namespace scraper is used.
   additionalIngressNamespaceSelectors: []
+  egress:
+    # In-cluster controllers use the Kubernetes service IP injected through
+    # KUBERNETES_SERVICE_HOST, so DNS egress is not required. When known, set
+    # apiServerCIDRs to restrict destinations as well as ports.
+    enabled: true
+    apiServerCIDRs: []
+    apiServerPorts:
+      - 443
+      - 6443
 
 podDisruptionBudget:
   enabled: false

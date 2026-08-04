@@ -96,15 +96,16 @@ Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 | [x] | Health/metrics | `/livez`، `/readyz` و `/metrics` | پاسخ زنده pending |
 | [x] | Observability | JSON logs، Prometheus metrics و eventهای pacing | scrape/log زنده pending |
 | [x] | Rolling update | یک replica و `maxSurge=0` بدون overlap | rollout/rollback زنده pending |
-| [x] | NetworkPolicy | ingress محدود به namespace/selectorهای مجاز | اجرای CNI pending |
+| [x] | NetworkPolicy | ingress محدود و egress فقط به پورت‌های API با CIDR اختیاری | اجرای CNI pending |
 | [x] | Secret hygiene | فقط reference به Secret؛ هیچ credential در سورس نیست | pull واقعی pending |
 | [x] | Profile production | gate-controller، Binding را به kube-scheduler واگذار می‌کند | smoke جداگانه pending |
+| [x] | Recovery production | state اتمیک روی PVC، تطبیق Pod UID و resume بدون release تکراری | تست replacement زنده pending |
 | [!] | Profile production | numerically معادل reproduction مقاله نیست | باید جدا گزارش شود |
 
 ## چک‌لیست Go/No-Go برای ادعای بازتولید مقاله
 
 - [x] الگوریتم، workload، Plan، schema، تست و manifests محلی کامل‌اند.
-- [x] 88 تست خودکار بدون skip یا failure پاس شده‌اند.
+- [x] 121 تست خودکار بدون skip یا failure پاس شده‌اند.
 - [x] Helm lint و schema سخت‌گیرانه Kubernetes 1.36 پاس شده است.
 - [x] Plan Lock دقیق 70 و 90 آماده است.
 - [ ] هر دو Docker image روی سرور build و smoke شوند.

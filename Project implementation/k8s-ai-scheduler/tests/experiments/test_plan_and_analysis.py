@@ -317,7 +317,7 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                     },
                 ])
             document["scheduler_record"] = {
-                "schema_version": 2,
+                "schema_version": 3,
                 "status": "completed",
                 "error": None,
                 "metadata": {
@@ -331,8 +331,9 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                     "reverse": spec.reverse,
                 },
                 "records": [
-                    {
-                        "job_id": job["job_id"],
+                        {
+                            "job_id": job["job_id"],
+                            "pod_uid": f"uid-{index}",
                         "order": index + 1,
                         "rank": job["rank"],
                         "status": "execution_started",
@@ -399,7 +400,7 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
         }],
     )
     schedule = {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "completed",
         "error": None,
         "metadata": {
@@ -414,6 +415,7 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
         },
         "records": [{
             "job_id": "job-a",
+            "pod_uid": "uid-job-a",
             "order": 1,
             "rank": 0.625,
             "status": "execution_started",

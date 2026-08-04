@@ -42,12 +42,17 @@ from k8s.work_model import (  # noqa: E402
     estimate_work,
     model_assumptions,
 )
+from scheduler.constants import EXECUTION_CONTAINER_ANNOTATION  # noqa: E402
 from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
 
 
 WORKLOAD_SCHEMA_VERSION = "1.1"
 OUTPUT_SENTINEL = ".ml-scheduler-workload"
 FEATURE_NAMES = ("T", "R", "M", "G", "C", "P")
+PRODUCTION_RESOURCE_REQUIREMENTS = {
+    "requests": {"cpu": "100m", "memory": "128Mi"},
+    "limits": {"cpu": "1", "memory": "1Gi"},
+}
 
 CATEGORY_RANGES: Dict[str, Dict[str, tuple[float, float]]] = {
     # T is derived from R/M/G/C/P by the versioned work model rather than
@@ -531,6 +536,11 @@ def _pod_manifest(
         spec["imagePullSecrets"] = [{"name": name} for name in pull_secrets]
     if scheduling_gate:
         spec["schedulingGates"] = [{"name": scheduling_gate}]
+        annotations[EXECUTION_CONTAINER_ANNOTATION] = "train"
+        spec["containers"][0]["resources"] = {
+            section: dict(values)
+            for section, values in PRODUCTION_RESOURCE_REQUIREMENTS.items()
+        }
 
     return {
         "apiVersion": "v1",
@@ -728,6 +738,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     document["container"] = {
         "image": args.image,
         "image_pull_secrets": list(dict.fromkeys(args.image_pull_secret)),
+        "custom_manifest_resources": (
+            PRODUCTION_RESOURCE_REQUIREMENTS if args.scheduling_gate else None
+        ),
     }
     save_json(jobs, output / "jobs.json", document=document)
     write_pod_manifests(

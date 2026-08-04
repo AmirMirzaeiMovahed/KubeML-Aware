@@ -22,5 +22,10 @@ experiment:
   config: production-gated
   repetition: ""
 
+persistence:
+  # Production recovery depends on schedule state surviving Pod replacement.
+  enabled: true
+  size: 1Gi
+
 podDisruptionBudget:
-  enabled: false
+  enabled: true

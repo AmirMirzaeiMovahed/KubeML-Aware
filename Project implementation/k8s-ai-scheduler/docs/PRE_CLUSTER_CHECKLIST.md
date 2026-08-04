@@ -94,10 +94,15 @@ output is captured.
 - [ ] Scheduler container runs as UID/GID 10001.
 - [ ] Root filesystem is read-only and all Linux capabilities are dropped.
 - [ ] CPU/memory requests and limits are present for the scheduler.
+- [ ] Gated production workload Pods have requests/limits and an explicit
+      execution-container contract when more than one container exists.
 - [ ] `/livez` returns HTTP 200.
 - [ ] `/readyz` returns HTTP 200 only when the Kubernetes client is ready.
 - [ ] `/metrics` returns Prometheus text.
-- [ ] NetworkPolicy is enforced by the cluster CNI as intended.
+- [ ] NetworkPolicy ingress and API-port-only egress are enforced by the cluster CNI;
+      production API-server CIDRs are configured when the network is known.
+- [ ] Production uses a Bound results PVC and a PDB; the Service publishes
+      diagnostic endpoints even while controller readiness is false.
 - [ ] Reproduction ServiceAccount can create `pods/binding`, get `pods/log`,
       and read the selected Node.
 - [ ] Production ServiceAccount can patch namespace Pods but cannot create
@@ -119,7 +124,9 @@ output is captured.
 - [ ] A malformed annotation fails without binding the malformed Pod.
 - [ ] A missing Pod causes burst timeout/incomplete-run failure.
 - [ ] An image-pull failure invalidates the run.
-- [ ] Scheduler restart behavior does not duplicate a binding/release.
+- [ ] Scheduler Pod replacement during a partial production run resumes from
+      the PVC, matches Pod UIDs, and does not duplicate a release.
+- [ ] Corrupt/failed persisted state makes `/readyz` fail and is not replayed.
 - [ ] A three-job production-gate burst removes gates in ranked order and the
       default scheduler selects nodes.
 - [ ] Missing/stale metrics fail closed in adaptive mode.

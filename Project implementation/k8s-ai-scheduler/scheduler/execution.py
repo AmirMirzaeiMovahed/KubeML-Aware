@@ -8,7 +8,7 @@ import re
 import time
 from typing import Any, Callable, Optional
 
-from .constants import EXECUTION_EVENT
+from .constants import EXECUTION_CONTAINER_ANNOTATION, EXECUTION_EVENT
 from .kube import ApiFailureKind, KubernetesOperationError, api_timeout, call_with_retries
 
 
@@ -19,6 +19,33 @@ class ExecutionStartError(RuntimeError):
 _LEGACY_MARKER = re.compile(
     r"^\s*\[(?P<timestamp>\d+(?:\.\d+)?)\]\s+EXECUTION_STARTED(?:\s.*)?$"
 )
+
+
+def execution_container_for_pod(pod: Any) -> str:
+    """Resolve the application container without assuming a fixed Pod shape."""
+
+    metadata = getattr(pod, "metadata", None)
+    annotations = dict(getattr(metadata, "annotations", None) or {})
+    requested = annotations.get(EXECUTION_CONTAINER_ANNOTATION)
+    containers = getattr(getattr(pod, "spec", None), "containers", None) or []
+    names = [getattr(container, "name", None) for container in containers]
+    if not names or any(not isinstance(name, str) or not name for name in names):
+        raise ExecutionStartError("pod has no valid application containers")
+    if len(names) != len(set(names)):
+        raise ExecutionStartError("pod has duplicate application container names")
+    if requested:
+        if requested not in names:
+            raise ExecutionStartError(
+                f"{EXECUTION_CONTAINER_ANNOTATION}={requested!r} does not name a container"
+            )
+        return str(requested)
+    if len(names) == 1:
+        return str(names[0])
+    if "train" in names:
+        return "train"
+    raise ExecutionStartError(
+        f"multi-container pod must set {EXECUTION_CONTAINER_ANNOTATION}"
+    )
 
 
 def parse_execution_marker(log_text: str, *, expected_job_id: Optional[str] = None) -> Optional[float]:
@@ -82,10 +109,13 @@ def wait_for_execution_start(
     poll_interval: float = 0.3,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    stop_requested: Optional[Callable[[], bool]] = None,
 ) -> float:
     deadline = monotonic() + timeout
     last_observation = "no logs available"
     while monotonic() < deadline:
+        if stop_requested is not None and stop_requested():
+            raise InterruptedError("shutdown requested while waiting for execution")
         try:
             logs = call_with_retries(
                 lambda: core_api.read_namespaced_pod_log(
@@ -133,6 +163,8 @@ def wait_for_execution_start(
         remaining = deadline - monotonic()
         if remaining > 0:
             sleep(min(poll_interval, remaining))
+    if stop_requested is not None and stop_requested():
+        raise InterruptedError("shutdown requested while waiting for execution")
     raise ExecutionStartError(
         f"timed out after {timeout:.3f}s waiting for {EXECUTION_EVENT} from "
         f"pod {namespace}/{pod_name}; last observation: {last_observation}"

@@ -34,19 +34,22 @@ image build, registry push, server-side dry run, or live deployment.
 |---|---|
 | Exact dependency imports and `pip check` | Passed; no broken requirements |
 | Python compile check | Passed for scheduler, workload, trainer, results, simulation, and experiments |
-| Automated tests | **112 passed**, zero skipped/failing |
+| Automated tests | **121 passed**, zero skipped/failing |
 | PowerShell parser validation | Passed |
 | Bash `-n` validation | Passed |
 | Helm values JSON Schema | Passed |
 | Helm lint | Passed for default, production, fixed reproduction, and dynamic matrix values |
 | Helm rendering | Passed for production, fixed reproduction, and dynamic matrix profiles |
-| Strict Kubernetes 1.36 schema validation | Passed for 25 rendered Helm objects |
+| Strict Kubernetes 1.36 schema validation | Passed for 27 rendered Helm objects |
 | Conditional RBAC inspection | Matrix includes Node Metrics read; fixed reproduction does not |
 | Helm negative cases | Missing target node, multiple replicas, `latest`, and invalid digest all rejected |
 | Dynamic Deployment contract | Digest rendering, custom scheduler module, target node, results template, and absence of fixed run filter verified |
 | Deterministic workload materialization | A 48-Pod run was generated, reused after exact comparison, and strict-schema validated |
 | Workload Pod security | Non-root, read-only root, dropped capabilities, RuntimeDefault seccomp, disabled API token/service links, bounded `/tmp` verified |
 | Private-registry wiring | Workload manifests and `jobs.json` carry the configured pull Secret reference |
+| Production restart recovery | Pod UID-bound state resumes a simulated mid-release interruption without duplicate release |
+| Production workload controls | Gated manifests carry CPU/memory bounds and an explicit execution-container contract |
+| Production isolation | PVC, PDB, diagnostic Service, ingress and API-port egress policies render and validate |
 | Plan invariants | Exact 70/90 counts, unique run IDs, `0..4` repetitions, paired seeds, and canonical hashes verified |
 | Result/evidence analysis | Complete 70-run synthetic Kubernetes-shaped evidence set passed strict end-to-end analysis |
 | Simulator smoke | Run/CSV/mean-ECDF/IQR plot generation passed; output remains proxy evidence only |

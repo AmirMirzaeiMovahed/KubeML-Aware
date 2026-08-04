@@ -22,16 +22,26 @@ if __package__ in (None, ""):
 from kubernetes import client, watch  # noqa: E402
 
 from scheduler.burst import (  # noqa: E402
+    AnnotationValidationError,
     BurstCollector,
     BurstContractError,
     RunSettings,
     extract_features,
     group_pods_by_run,
+    pod_run_id,
     run_settings_for_pods,
 )
 from scheduler.config import ConfigurationError, SchedulerConfig  # noqa: E402
-from scheduler.constants import RELEASE_GATE  # noqa: E402
-from scheduler.execution import ExecutionStartError, wait_for_execution_start  # noqa: E402
+from scheduler.constants import (  # noqa: E402
+    RELEASE_GATE,
+    RUN_ID_ANNOTATION,
+    RUN_ID_LABEL,
+)
+from scheduler.execution import (  # noqa: E402
+    ExecutionStartError,
+    execution_container_for_pod,
+    wait_for_execution_start,
+)
 from scheduler.kube import (  # noqa: E402
     ApiFailureKind,
     KubernetesOperationError,
@@ -44,9 +54,14 @@ from scheduler.pacing import (  # noqa: E402
     MetricsSample,
     Pacer,
     PacingError,
+    PacingInterrupted,
 )
 from scheduler.rank import compute_ranks, sort_by_rank  # noqa: E402
-from scheduler.records import AtomicRecordStore, ScheduleRecord  # noqa: E402
+from scheduler.records import (  # noqa: E402
+    AtomicRecordStore,
+    RecordStoreError,
+    ScheduleRecord,
+)
 from scheduler.telemetry import (  # noqa: E402
     HealthServer,
     HealthState,
@@ -56,6 +71,10 @@ from scheduler.telemetry import (  # noqa: E402
 
 
 class GateReleaseError(RuntimeError):
+    pass
+
+
+class ControllerStopping(RuntimeError):
     pass
 
 
@@ -92,6 +111,7 @@ class SchedulingGateController:
         self.enable_health_server = enable_health_server
         self._stop = False
         self._processed_runs = set()
+        self._failed_runs = set()
         self.records: List[ScheduleRecord] = []
         self.feedback: Optional[ClusterMetricsFeedback] = None
 
@@ -125,14 +145,13 @@ class SchedulingGateController:
             )
         )
 
-    def _list_eligible_pods(self) -> List[Any]:
+    def _list_run_pods(self) -> List[Any]:
         response = call_with_retries(
             lambda: self.v1.list_namespaced_pod(
                 self.config.namespace,
-                field_selector="status.phase=Pending",
                 _request_timeout=api_timeout(self.config.api_timeout),
             ),
-            operation="list scheduling-gated pods",
+            operation="list production run pods",
             retries=self.config.api_retries,
         )
         return [
@@ -140,10 +159,21 @@ class SchedulingGateController:
             for pod in (getattr(response, "items", None) or [])
             if getattr(getattr(pod, "spec", None), "scheduler_name", None)
             == self.config.scheduler_name
-            and getattr(getattr(pod, "spec", None), "node_name", None) is None
-            and getattr(getattr(pod, "status", None), "phase", None) == "Pending"
-            and self._has_gate(pod)
+            and (
+                (getattr(getattr(pod, "metadata", None), "labels", None) or {}).get(
+                    RUN_ID_LABEL
+                )
+                or (
+                    getattr(getattr(pod, "metadata", None), "annotations", None)
+                    or {}
+                ).get(RUN_ID_ANNOTATION)
+            )
         ]
+
+    def _list_eligible_pods(self) -> List[Any]:
+        """Compatibility name: includes gated and already released run members."""
+
+        return self._list_run_pods()
 
     def _watch_for_change(self, timeout: float) -> None:
         if timeout < 1.0:
@@ -174,14 +204,85 @@ class SchedulingGateController:
             str(getattr(metadata, "name", "")),
         )
 
-    def _discover_settings(self, *, wait_forever: bool) -> RunSettings:
+    def _set_ready(self, ready: bool, reason: str) -> None:
+        self.health.set_ready(ready, reason)
+        self.metrics.set("ml_scheduler_ready", 1 if ready else 0)
+
+    def _record_metadata(self, settings: RunSettings) -> Dict[str, object]:
+        return {
+            "profile": "production-scheduling-gate",
+            "gate_name": self.gate_name,
+            "run_id": settings.run_id,
+            "expected_count": settings.expected_count,
+            "scheduler_name": self.config.scheduler_name,
+            "namespace": self.config.namespace,
+            "pacing_mode": settings.pacing_mode,
+            "fixed_delay": settings.fixed_delay,
+            "reverse": settings.reverse,
+        }
+
+    def _persisted_candidate_status(
+        self,
+        settings: RunSettings,
+        pods: Sequence[Any],
+        *,
+        one_shot: bool,
+    ) -> Optional[str]:
+        store = AtomicRecordStore(
+            self._results_path(settings.run_id, one_shot=one_shot),
+            metadata=self._record_metadata(settings),
+        )
+        try:
+            if not store.load_existing():
+                return None
+        except RecordStoreError:
+            # Let process_run surface the exact unsafe-state error and persist
+            # controller degradation instead of silently skipping the run.
+            return None
+        observed = {
+            (str(pod.metadata.name), str(pod.metadata.uid)) for pod in pods
+        }
+        recorded = {
+            (str(record.get("job_id")), str(record.get("pod_uid")))
+            for record in store.records
+        }
+        if observed != recorded:
+            return None
+        return store.status
+
+    def _discover_settings(
+        self, *, wait_forever: bool, one_shot: bool = False
+    ) -> RunSettings:
         deadline = None if wait_forever else self.monotonic() + self.config.burst_timeout
         while not self._stop and (deadline is None or self.monotonic() < deadline):
-            groups = group_pods_by_run(self._list_eligible_pods())
+            valid_pods = []
+            for pod in self._list_run_pods():
+                try:
+                    pod_run_id(pod)
+                except AnnotationValidationError as exc:
+                    name = getattr(getattr(pod, "metadata", None), "name", "unknown")
+                    self._set_ready(False, f"invalid run identity on Pod {name}")
+                    self.logger.error(
+                        "run_discovery_rejected", pod_name=name, error=str(exc)
+                    )
+                    continue
+                valid_pods.append(pod)
+            groups = group_pods_by_run(valid_pods)
             if self.config.run_id:
-                pods = groups.get(self.config.run_id, [])
-                if pods:
-                    return run_settings_for_pods(
+                candidates = [(self.config.run_id, groups.get(self.config.run_id, []))]
+            else:
+                candidates = [
+                    (run_id, pods)
+                    for run_id, pods in groups.items()
+                    if run_id not in self._processed_runs
+                ]
+            candidates = [item for item in candidates if item[1]]
+            candidates.sort(key=lambda item: self._pod_order_key(item[1][0]))
+            for run_id, pods in candidates:
+                if run_id in self._processed_runs:
+                    continue
+                try:
+                    settings = run_settings_for_pods(
                         pods,
                         fallback_run_id=self.config.run_id,
                         fallback_expected_count=self.config.expected_count,
@@ -189,32 +290,40 @@ class SchedulingGateController:
                         fallback_fixed_delay=self.config.fixed_delay,
                         fallback_reverse=self.config.reverse,
                     )
-            else:
-                candidates = [
-                    (run_id, pods)
-                    for run_id, pods in groups.items()
-                    if run_id not in self._processed_runs
-                ]
-                if candidates:
-                    candidates.sort(key=lambda item: self._pod_order_key(item[1][0]))
-                    return run_settings_for_pods(
-                        candidates[0][1],
-                        fallback_run_id=None,
-                        fallback_expected_count=None,
-                        fallback_pacing_mode=self.config.pacing_mode,
-                        fallback_fixed_delay=self.config.fixed_delay,
-                        fallback_reverse=self.config.reverse,
+                except (AnnotationValidationError, BurstContractError) as exc:
+                    self._processed_runs.add(run_id)
+                    self._failed_runs.add(run_id)
+                    self._set_ready(False, f"run {run_id} metadata is invalid")
+                    self.metrics.inc(
+                        "ml_scheduler_failures_total",
+                        labels={"stage": type(exc).__name__},
                     )
+                    self.logger.error(
+                        "run_discovery_rejected", run_id=run_id, error=str(exc)
+                    )
+                    continue
+                persisted = self._persisted_candidate_status(
+                    settings, pods, one_shot=one_shot
+                )
+                if persisted == "completed":
+                    self._processed_runs.add(run_id)
+                    continue
+                if persisted == "failed":
+                    self._processed_runs.add(run_id)
+                    self._failed_runs.add(run_id)
+                    self._set_ready(False, f"run {run_id} has failed persisted state")
+                    continue
+                return settings
             self.sleep(self.config.poll_interval)
         if self._stop:
-            raise BurstContractError("controller stopped while waiting for a run")
+            raise ControllerStopping("controller stopped while waiting for a run")
         raise BurstContractError(
-            f"no gated run appeared within {self.config.burst_timeout:.3f}s"
+            f"no runnable gated run appeared within {self.config.burst_timeout:.3f}s"
         )
 
     def _collect(self, settings: RunSettings) -> List[Any]:
         collector = BurstCollector(
-            self._list_eligible_pods,
+            self._list_run_pods,
             quiet_period=self.config.quiet_period,
             timeout=self.config.burst_timeout,
             poll_interval=self.config.poll_interval,
@@ -298,18 +407,23 @@ class SchedulingGateController:
             f"could not remove gate from {pod_name} after concurrent updates: {last_error}"
         )
 
-    def _wait_for_execution_start(self, pod_name: str) -> float:
-        return wait_for_execution_start(
-            self.v1,
-            pod_name,
-            self.config.namespace,
-            timeout=self.config.execution_timeout,
-            api_timeout_seconds=self.config.api_timeout,
-            api_retries=self.config.api_retries,
-            poll_interval=self.config.poll_interval,
-            monotonic=self.monotonic,
-            sleep=self.sleep,
-        )
+    def _wait_for_execution_start(self, pod_name: str, *, container: str) -> float:
+        try:
+            return wait_for_execution_start(
+                self.v1,
+                pod_name,
+                self.config.namespace,
+                timeout=self.config.execution_timeout,
+                api_timeout_seconds=self.config.api_timeout,
+                api_retries=self.config.api_retries,
+                container=container,
+                poll_interval=self.config.poll_interval,
+                monotonic=self.monotonic,
+                sleep=self.sleep,
+                stop_requested=lambda: self._stop,
+            )
+        except InterruptedError as exc:
+            raise ControllerStopping(str(exc)) from exc
 
     def _on_metrics_sample(self, sample: MetricsSample, age: float) -> None:
         self.metrics.set("ml_scheduler_cpu_utilization_ratio", sample.utilization)
@@ -354,6 +468,7 @@ class SchedulingGateController:
             wall_time=self.wall_time,
             sleep=self.sleep,
             on_sample=record_sample,
+            stop_requested=lambda: self._stop,
         )
 
     def _results_path(self, run_id: str, *, one_shot: bool) -> str:
@@ -368,6 +483,7 @@ class SchedulingGateController:
     def process_run(self, settings: RunSettings, *, one_shot: bool = False) -> List[ScheduleRecord]:
         self.metrics.inc("ml_scheduler_bursts_total")
         pods = self._collect(settings)
+        self.metrics.set("ml_scheduler_burst_jobs", len(pods), {"run_id": settings.run_id})
         pods_by_name = {pod.metadata.name: pod for pod in pods}
         jobs = [extract_features(pod) for pod in pods]
         ranks = compute_ranks(jobs)
@@ -377,85 +493,192 @@ class SchedulingGateController:
             reverse_order=settings.reverse,
             tie_breaker=lambda job: tie_keys[job.job_id],
         )
-        store = AtomicRecordStore(
-            self._results_path(settings.run_id, one_shot=one_shot),
-            metadata={
-                "profile": "production-scheduling-gate",
-                "gate_name": self.gate_name,
-                "run_id": settings.run_id,
-                "expected_count": settings.expected_count,
-                "scheduler_name": self.config.scheduler_name,
-                "namespace": self.config.namespace,
-                "pacing_mode": settings.pacing_mode,
-                "fixed_delay": settings.fixed_delay,
-                "reverse": settings.reverse,
-            },
-        )
-        store.initialize()
-        store.set_status("running")
-        records = [
-            ScheduleRecord(job.job_id, index, ranks[job.job_id])
+        expected_records = [
+            ScheduleRecord(
+                job.job_id,
+                index,
+                ranks[job.job_id],
+                pod_uid=str(pods_by_name[job.job_id].metadata.uid),
+            )
             for index, job in enumerate(ordered, start=1)
         ]
-        for record in records:
-            store.upsert(record)
-        self.logger.info(
-            "burst_ranked",
-            run_id=settings.run_id,
-            order=[job.job_id for job in ordered],
-            ranks=ranks,
+        expected_by_job = {record.job_id: record for record in expected_records}
+        store = AtomicRecordStore(
+            self._results_path(settings.run_id, one_shot=one_shot),
+            metadata=self._record_metadata(settings),
         )
+        resumed = store.load_existing()
+        if resumed:
+            if store.status == "completed":
+                raise RecordStoreError("completed scheduler state cannot be replayed")
+            if store.status == "failed":
+                raise RecordStoreError("failed scheduler state requires operator action")
+            existing_by_job: Dict[str, ScheduleRecord] = {}
+            for raw in store.records:
+                try:
+                    existing = ScheduleRecord(**raw)
+                except (TypeError, ValueError) as exc:
+                    raise RecordStoreError(
+                        f"invalid persisted record for {raw.get('job_id')!r}"
+                    ) from exc
+                expected = expected_by_job.get(existing.job_id)
+                if expected is None or (
+                    existing.order,
+                    existing.rank,
+                    existing.pod_uid,
+                ) != (expected.order, expected.rank, expected.pod_uid):
+                    raise RecordStoreError(
+                        f"persisted record drift for {existing.job_id!r}"
+                    )
+                if existing.status not in {
+                    "ranked",
+                    "releasing",
+                    "released",
+                    "execution_started",
+                }:
+                    raise RecordStoreError(
+                        f"persisted record status is not resumable: {existing.status!r}"
+                    )
+                existing_by_job[existing.job_id] = existing
+            records = [
+                existing_by_job.get(expected.job_id, expected)
+                for expected in expected_records
+            ]
+            store.set_status("running")
+            for record in records:
+                store.upsert(record)
+            store.append_event({
+                "event": "controller_resumed",
+                "run_id": settings.run_id,
+                "timestamp": self.wall_time(),
+                "completed_jobs": sum(
+                    record.status == "execution_started" for record in records
+                ),
+            })
+            self.logger.info(
+                "run_resumed",
+                run_id=settings.run_id,
+                completed_jobs=sum(
+                    record.status == "execution_started" for record in records
+                ),
+            )
+        else:
+            if not all(self._has_gate(pod) for pod in pods):
+                raise GateReleaseError(
+                    "a new production run must start with the release gate on every Pod"
+                )
+            records = expected_records
+            store.initialize()
+            store.set_status("running")
+            for record in records:
+                store.upsert(record)
+            self.logger.info(
+                "burst_ranked",
+                run_id=settings.run_id,
+                order=[job.job_id for job in ordered],
+                ranks=ranks,
+            )
         pacer = self._pacer(settings, store=store)
         try:
             for index, (job, record) in enumerate(zip(ordered, records)):
-                record.status = "releasing"
-                store.upsert(record)
-                self._remove_gate(job.job_id)
-                record.release_time = self.wall_time()
-                record.status = "released"
-                store.upsert(record)
-                self.logger.info(
-                    "scheduling_gate_removed",
-                    run_id=settings.run_id,
-                    job_id=job.job_id,
-                    rank=record.rank,
-                    order=record.order,
+                if self._stop:
+                    raise ControllerStopping("shutdown requested before next release")
+                pod = pods_by_name[job.job_id]
+                container = execution_container_for_pod(pod)
+                if record.status in {"released", "execution_started"} and self._has_gate(pod):
+                    raise RecordStoreError(
+                        f"persisted {record.status} record {job.job_id!r} is gated"
+                    )
+                if record.status == "execution_started":
+                    continue
+                if resumed and record.status == "ranked" and not self._has_gate(pod):
+                    raise RecordStoreError(
+                        f"unrecorded external gate removal for {job.job_id!r}"
+                    )
+                if index > 0 and self._has_gate(pod):
+                    previous = ordered[index - 1].job_id
+                    pacing_done = any(
+                        event.get("event") == "pacing_wait_completed"
+                        and event.get("after_job_id") == previous
+                        and event.get("before_job_id") == job.job_id
+                        for event in store.events
+                    )
+                    if not pacing_done:
+                        store.append_event({
+                            "event": "pacing_wait_started",
+                            "after_job_id": previous,
+                            "before_job_id": job.job_id,
+                            "mode": settings.pacing_mode,
+                            "fixed_delay_seconds": settings.fixed_delay,
+                            "timestamp": self.wall_time(),
+                        })
+                        try:
+                            pacer.wait()
+                        except PacingInterrupted as exc:
+                            store.append_event({
+                                "event": "pacing_wait_interrupted",
+                                "after_job_id": previous,
+                                "before_job_id": job.job_id,
+                                "mode": settings.pacing_mode,
+                                "timestamp": self.wall_time(),
+                            })
+                            raise ControllerStopping(str(exc)) from exc
+                        except Exception as exc:
+                            store.append_event({
+                                "event": "pacing_wait_failed",
+                                "after_job_id": previous,
+                                "before_job_id": job.job_id,
+                                "mode": settings.pacing_mode,
+                                "timestamp": self.wall_time(),
+                                "error": str(exc),
+                            })
+                            raise
+                        store.append_event({
+                            "event": "pacing_wait_completed",
+                            "after_job_id": previous,
+                            "before_job_id": job.job_id,
+                            "mode": settings.pacing_mode,
+                            "timestamp": self.wall_time(),
+                        })
+                if self._stop:
+                    raise ControllerStopping("shutdown requested before gate removal")
+                if self._has_gate(pod):
+                    if record.release_time is None:
+                        record.release_time = self.wall_time()
+                    record.status = "releasing"
+                    store.upsert(record)
+                    self._remove_gate(job.job_id)
+                    record.status = "released"
+                    store.upsert(record)
+                    self.logger.info(
+                        "scheduling_gate_removed",
+                        run_id=settings.run_id,
+                        job_id=job.job_id,
+                        rank=record.rank,
+                        order=record.order,
+                    )
+                elif record.status == "releasing":
+                    if record.release_time is None:
+                        record.release_time = self.wall_time()
+                    record.status = "released"
+                    store.upsert(record)
+                    store.append_event({
+                        "event": "release_reconciled_after_restart",
+                        "job_id": job.job_id,
+                        "timestamp": self.wall_time(),
+                    })
+                record.exec_start_time = self._wait_for_execution_start(
+                    job.job_id, container=container
                 )
-                record.exec_start_time = self._wait_for_execution_start(job.job_id)
                 record.status = "execution_started"
                 store.upsert(record)
                 self.metrics.inc(
                     "ml_scheduler_releases_total", labels={"profile": "scheduling-gate"}
                 )
-                if index < len(records) - 1:
-                    store.append_event({
-                        "event": "pacing_wait_started",
-                        "after_job_id": job.job_id,
-                        "before_job_id": ordered[index + 1].job_id,
-                        "mode": settings.pacing_mode,
-                        "fixed_delay_seconds": settings.fixed_delay,
-                        "timestamp": self.wall_time(),
-                    })
-                    try:
-                        pacer.wait()
-                    except Exception as exc:
-                        store.append_event({
-                            "event": "pacing_wait_failed",
-                            "after_job_id": job.job_id,
-                            "mode": settings.pacing_mode,
-                            "timestamp": self.wall_time(),
-                            "error": str(exc),
-                        })
-                        raise
-                    store.append_event({
-                        "event": "pacing_wait_completed",
-                        "after_job_id": job.job_id,
-                        "before_job_id": ordered[index + 1].job_id,
-                        "mode": settings.pacing_mode,
-                        "timestamp": self.wall_time(),
-                    })
             store.set_status("completed")
             self.records.extend(records)
+            if not self._failed_runs:
+                self._set_ready(True, "Kubernetes API healthy; all observed runs reconciled")
             self.logger.info(
                 "run_completed",
                 run_id=settings.run_id,
@@ -463,6 +686,13 @@ class SchedulingGateController:
                 jobs=len(records),
             )
             return records
+        except ControllerStopping:
+            store.append_event({
+                "event": "controller_stopped",
+                "run_id": settings.run_id,
+                "timestamp": self.wall_time(),
+            })
+            raise
         except Exception as exc:
             current = next(
                 (record for record in records if record.status in {"releasing", "released"}),
@@ -473,6 +703,8 @@ class SchedulingGateController:
                 current.error = str(exc)
                 store.upsert(current)
             store.set_status("failed", str(exc))
+            self._failed_runs.add(settings.run_id)
+            self._set_ready(False, f"run {settings.run_id} failed: {type(exc).__name__}")
             self.metrics.inc(
                 "ml_scheduler_failures_total", labels={"stage": type(exc).__name__}
             )
@@ -488,18 +720,23 @@ class SchedulingGateController:
         if self.enable_health_server:
             self.health_server.start()
 
-    def stop(self) -> None:
+    def request_stop(self) -> None:
         self._stop = True
         self.health.set_ready(False, "shutdown requested")
         self.metrics.set("ml_scheduler_ready", 0)
+
+    def stop(self) -> None:
+        self.request_stop()
         if self.enable_health_server:
             self.health_server.stop()
 
     def run_once(self) -> List[ScheduleRecord]:
         self._start_health()
-        settings = self._discover_settings(wait_forever=False)
+        settings = self._discover_settings(wait_forever=False, one_shot=True)
         try:
             return self.process_run(settings, one_shot=True)
+        except ControllerStopping:
+            raise
         except Exception as exc:
             self._preserve_unhandled_failure(settings, exc, one_shot=True)
             raise
@@ -512,23 +749,17 @@ class SchedulingGateController:
     ) -> None:
         path = self._results_path(settings.run_id, one_shot=one_shot)
         if not os.path.exists(path):
-            store = AtomicRecordStore(path, metadata={
-                "profile": "production-scheduling-gate",
-                "gate_name": self.gate_name,
-                "run_id": settings.run_id,
-                "expected_count": settings.expected_count,
-                "scheduler_name": self.config.scheduler_name,
-                "namespace": self.config.namespace,
-                "pacing_mode": settings.pacing_mode,
-                "fixed_delay": settings.fixed_delay,
-                "reverse": settings.reverse,
-            })
+            store = AtomicRecordStore(
+                path, metadata=self._record_metadata(settings)
+            )
             store.initialize()
             store.set_status("failed", str(exc))
             self.metrics.inc(
                 "ml_scheduler_failures_total",
                 labels={"stage": type(exc).__name__},
             )
+        self._failed_runs.add(settings.run_id)
+        self._set_ready(False, f"run {settings.run_id} failed: {type(exc).__name__}")
         self.logger.error(
             "run_rejected",
             run_id=settings.run_id,
@@ -544,6 +775,8 @@ class SchedulingGateController:
                 settings = self._discover_settings(wait_forever=True)
                 try:
                     self.process_run(settings, one_shot=False)
+                except ControllerStopping:
+                    break
                 except Exception as exc:
                     self._preserve_unhandled_failure(settings, exc)
                 finally:
@@ -608,13 +841,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         controller = SchedulingGateController(config, gate_name=args.gate_name)
     except ConfigurationError as exc:
         parser.error(str(exc))
-    signal.signal(signal.SIGTERM, lambda *_args: controller.stop())
-    signal.signal(signal.SIGINT, lambda *_args: controller.stop())
+    signal.signal(signal.SIGTERM, lambda *_args: controller.request_stop())
+    signal.signal(signal.SIGINT, lambda *_args: controller.request_stop())
     try:
         if args.once:
             controller.run_once()
         else:
             controller.run_forever()
+        return 0
+    except ControllerStopping:
+        controller.logger.info("controller_stopped", reason="shutdown requested")
         return 0
     except (
         BurstContractError,

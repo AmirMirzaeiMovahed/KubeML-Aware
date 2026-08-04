@@ -6,7 +6,6 @@ import json
 import math
 import sys
 import threading
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

@@ -141,6 +141,7 @@ def test_pod_yaml_is_valid_and_contains_run_contract():
     assert manifest["spec"]["imagePullSecrets"] == [
         {"name": "registry-credentials"}
     ]
+    assert "resources" not in manifest["spec"]["containers"][0]
 
 
 def test_invalid_image_pull_secret_is_rejected():
@@ -152,6 +153,28 @@ def test_invalid_image_pull_secret_is_rejected():
             "registry.example/ml-sim:v1",
             image_pull_secrets=["Invalid Secret"],
         )
+
+
+def test_gated_production_manifest_has_resources_and_container_contract():
+    job = generate_burst(1, seed=9)[0]
+    manifest = yaml.safe_load(
+        to_pod_yaml(
+            job,
+            "default-scheduler",
+            "registry.example/ml-sim:v1",
+            scheduling_gate="ml.scheduler/release",
+        )
+    )
+    assert manifest["metadata"]["annotations"][
+        "ml.scheduler/execution-container"
+    ] == "train"
+    assert manifest["spec"]["schedulingGates"] == [
+        {"name": "ml.scheduler/release"}
+    ]
+    assert manifest["spec"]["containers"][0]["resources"] == {
+        "requests": {"cpu": "100m", "memory": "128Mi"},
+        "limits": {"cpu": "1", "memory": "1Gi"},
+    }
 
 
 def test_nonempty_output_is_rejected_and_overwrite_requires_sentinel(tmp_path: Path):

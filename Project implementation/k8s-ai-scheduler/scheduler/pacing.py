@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 from .kube import api_timeout, call_with_retries, parse_cpu_quantity
@@ -15,6 +15,10 @@ class FeedbackUnavailable(RuntimeError):
 
 
 class PacingError(RuntimeError):
+    pass
+
+
+class PacingInterrupted(RuntimeError):
     pass
 
 
@@ -205,6 +209,7 @@ class Pacer:
         wall_time: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         on_sample: Optional[Callable[[MetricsSample, float], None]] = None,
+        stop_requested: Optional[Callable[[], bool]] = None,
     ):
         if mode not in {"none", "fixed", "adaptive"}:
             raise ValueError("invalid pacing mode")
@@ -226,8 +231,14 @@ class Pacer:
         self.wall_time = wall_time
         self.sleep = sleep
         self.on_sample = on_sample
+        self.stop_requested = stop_requested
+
+    def _check_stop(self) -> None:
+        if self.stop_requested is not None and self.stop_requested():
+            raise PacingInterrupted("shutdown requested during pacing")
 
     def wait(self) -> None:
+        self._check_stop()
         if self.mode == "none":
             return
         if self.mode == "fixed":
@@ -237,10 +248,11 @@ class Pacer:
 
     def _sleep_until(self, deadline: float) -> None:
         while True:
+            self._check_stop()
             remaining = deadline - self.monotonic()
             if remaining <= 0:
                 return
-            self.sleep(remaining)
+            self.sleep(min(self.poll_interval, remaining))
 
     def _wait_adaptive(self) -> None:
         deadline = self.monotonic() + self.max_wait
@@ -250,6 +262,7 @@ class Pacer:
         last_error: Optional[str] = None
 
         while self.monotonic() < deadline:
+            self._check_stop()
             try:
                 sample = self.feedback.sample()  # type: ignore[union-attr]
                 age = max(0.0, self.wall_time() - sample.observed_at)
@@ -287,6 +300,8 @@ class Pacer:
             remaining = deadline - self.monotonic()
             if remaining > 0:
                 self.sleep(min(self.poll_interval, remaining))
+
+        self._check_stop()
 
         raise PacingError(
             "adaptive pacing deadline expired without two fresh low-utilization "

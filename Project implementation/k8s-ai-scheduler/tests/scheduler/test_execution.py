@@ -6,6 +6,7 @@ from kubernetes.client.exceptions import ApiException
 
 from scheduler.execution import (
     ExecutionStartError,
+    execution_container_for_pod,
     parse_execution_marker,
     wait_for_execution_start,
 )
@@ -26,6 +27,22 @@ def running_pod():
     return SimpleNamespace(
         status=SimpleNamespace(phase="Running", reason=None, message=None, container_statuses=[])
     )
+
+
+def test_execution_container_is_explicit_for_ambiguous_pods():
+    pod = SimpleNamespace(
+        metadata=SimpleNamespace(annotations={}),
+        spec=SimpleNamespace(
+            containers=[SimpleNamespace(name="model"), SimpleNamespace(name="sidecar")]
+        ),
+    )
+    with pytest.raises(ExecutionStartError, match="execution-container"):
+        execution_container_for_pod(pod)
+    pod.metadata.annotations["ml.scheduler/execution-container"] = "model"
+    assert execution_container_for_pod(pod) == "model"
+    pod.metadata.annotations["ml.scheduler/execution-container"] = "missing"
+    with pytest.raises(ExecutionStartError, match="does not name"):
+        execution_container_for_pod(pod)
 
 
 def test_parser_accepts_json_and_legacy_markers_only():
@@ -116,3 +133,24 @@ def test_timeout_reports_last_observation():
             sleep=clock.sleep,
         )
     assert clock.value == pytest.approx(1.0)
+
+
+def test_execution_wait_honors_shutdown_before_api_calls():
+    core = SimpleNamespace(
+        read_namespaced_pod_log=lambda *_args, **_kwargs: pytest.fail(
+            "log API should not be called"
+        ),
+        read_namespaced_pod_status=lambda *_args, **_kwargs: pytest.fail(
+            "status API should not be called"
+        ),
+    )
+    with pytest.raises(InterruptedError, match="shutdown"):
+        wait_for_execution_start(
+            core,
+            "job-a",
+            "test",
+            timeout=1,
+            api_timeout_seconds=1,
+            api_retries=0,
+            stop_requested=lambda: True,
+        )

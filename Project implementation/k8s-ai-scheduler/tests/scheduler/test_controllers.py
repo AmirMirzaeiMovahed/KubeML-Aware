@@ -6,9 +6,16 @@ from kubernetes.client.exceptions import ApiException
 
 from scheduler.burst import RunSettings
 from scheduler.config import ConfigurationError, SchedulerConfig
-from scheduler.constants import ANNOTATION_MAP, EXPECTED_JOBS_ANNOTATION, RELEASE_GATE, RUN_ID_LABEL
+from scheduler.constants import (
+    ANNOTATION_MAP,
+    EXPECTED_JOBS_ANNOTATION,
+    PACING_MODE_ANNOTATION,
+    RELEASE_GATE,
+    RUN_ID_ANNOTATION,
+    RUN_ID_LABEL,
+)
 from scheduler.custom_scheduler import MLAwareScheduler, ManualBindingSafetyError
-from scheduler.gate_controller import SchedulingGateController
+from scheduler.gate_controller import ControllerStopping, SchedulingGateController
 
 
 def node():
@@ -52,7 +59,7 @@ def pod(name, *, best=False, gated=False):
             affinity=None,
             topology_spread_constraints=None,
             volumes=[],
-            containers=[],
+            containers=[SimpleNamespace(name="train")],
             node_selector={},
         ),
         status=SimpleNamespace(phase="Pending"),
@@ -234,7 +241,9 @@ def test_gate_process_keeps_normal_scheduler_and_records_release(tmp_path):
     released = []
     controller._collect = lambda _settings: pods
     controller._remove_gate = released.append
-    controller._wait_for_execution_start = lambda name: {"best": 101, "worst": 102}[name]
+    controller._wait_for_execution_start = (
+        lambda name, **_kwargs: {"best": 101, "worst": 102}[name]
+    )
     records = controller.process_run(
         RunSettings("run-1", 2, "none", 0, False), one_shot=True
     )
@@ -244,3 +253,112 @@ def test_gate_process_keeps_normal_scheduler_and_records_release(tmp_path):
     document = json.loads((tmp_path / "gate.json").read_text())
     assert document["metadata"]["profile"] == "production-scheduling-gate"
     assert document["status"] == "completed"
+
+
+def test_gate_controller_resumes_partial_run_without_duplicate_release(tmp_path):
+    pods = [pod("worst", gated=True), pod("best", best=True, gated=True)]
+    by_name = {item.metadata.name: item for item in pods}
+    first_releases = []
+    first = make_gate(tmp_path)
+    first._collect = lambda _settings: pods
+    first._wait_for_execution_start = lambda name, **_kwargs: {
+        "best": 101,
+        "worst": 102,
+    }[name]
+
+    def interrupted_release(name):
+        first_releases.append(name)
+        if name == "worst":
+            raise KeyboardInterrupt("simulated container restart")
+        by_name[name].spec.scheduling_gates = []
+
+    first._remove_gate = interrupted_release
+    settings = RunSettings("run-1", 2, "none", 0, False)
+    with pytest.raises(KeyboardInterrupt):
+        first.process_run(settings, one_shot=True)
+    assert first_releases == ["best", "worst"]
+    assert by_name["best"].spec.scheduling_gates == []
+    assert by_name["worst"].spec.scheduling_gates
+
+    recovered_releases = []
+    recovered = make_gate(tmp_path)
+    recovered._collect = lambda _settings: pods
+    recovered._wait_for_execution_start = lambda name, **_kwargs: {
+        "best": 101,
+        "worst": 102,
+    }[name]
+
+    def recovered_release(name):
+        recovered_releases.append(name)
+        by_name[name].spec.scheduling_gates = []
+
+    recovered._remove_gate = recovered_release
+    records = recovered.process_run(settings, one_shot=True)
+    assert recovered_releases == ["worst"]
+    assert [record.status for record in records] == [
+        "execution_started",
+        "execution_started",
+    ]
+    document = json.loads((tmp_path / "gate.json").read_text())
+    assert document["schema_version"] == 3
+    assert document["status"] == "completed"
+    assert any(
+        event["event"] == "controller_resumed" for event in document["events"]
+    )
+    assert {record["pod_uid"] for record in document["records"]} == {
+        "uid-best",
+        "uid-worst",
+    }
+
+
+def test_gate_failure_marks_readiness_degraded(tmp_path):
+    controller = make_gate(tmp_path)
+    pods = [pod("worst", gated=True), pod("best", best=True, gated=True)]
+    controller._collect = lambda _settings: pods
+    controller._remove_gate = lambda _name: None
+    controller._wait_for_execution_start = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        RuntimeError("marker unavailable")
+    )
+    with pytest.raises(RuntimeError, match="marker unavailable"):
+        controller.process_run(
+            RunSettings("run-1", 2, "none", 0, False), one_shot=True
+        )
+    _live, ready, reason = controller.health.snapshot()
+    assert ready is False
+    assert "run run-1 failed" in reason
+
+
+def test_gate_shutdown_leaves_resumable_running_state(tmp_path):
+    controller = make_gate(tmp_path)
+    pods = [pod("worst", gated=True), pod("best", best=True, gated=True)]
+    controller._collect = lambda _settings: pods
+    controller.request_stop()
+    with pytest.raises(ControllerStopping):
+        controller.process_run(
+            RunSettings("run-1", 2, "none", 0, False), one_shot=True
+        )
+    document = json.loads((tmp_path / "gate.json").read_text())
+    assert document["status"] == "running"
+    assert document["error"] is None
+    assert document["events"][-1]["event"] == "controller_stopped"
+
+
+def test_gate_discovery_isolates_malformed_run_and_continues(tmp_path):
+    controller = make_gate(tmp_path)
+    bad = pod("bad", gated=True)
+    bad.metadata.labels[RUN_ID_LABEL] = "bad-run"
+    bad.metadata.annotations[PACING_MODE_ANNOTATION] = "invalid"
+    conflicting = pod("conflicting", gated=True)
+    conflicting.metadata.labels[RUN_ID_LABEL] = "label-run"
+    conflicting.metadata.annotations[RUN_ID_ANNOTATION] = "annotation-run"
+    good = [pod("good-a", gated=True), pod("good-b", gated=True)]
+    for item in good:
+        item.metadata.labels[RUN_ID_LABEL] = "good-run"
+    controller._list_run_pods = lambda: [conflicting, bad, *good]
+
+    settings = controller._discover_settings(wait_forever=False)
+    assert settings.run_id == "good-run"
+    assert "bad-run" in controller._failed_runs
+    _live, ready, reason = controller.health.snapshot()
+    assert ready is False
+    assert "bad-run" in reason

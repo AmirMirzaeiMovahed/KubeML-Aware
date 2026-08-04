@@ -214,11 +214,17 @@ cp deploy/helm/ml-ai-scheduler/local-values.example.yaml values.local.yaml
 ```yaml
 imagePullSecrets:
   - name: registry-credentials
-# Optional: retain scheduler order records across Pod replacement. Confirm a
-# default dynamic StorageClass exists, or set persistence.existingClaim.
+# Production enables persistence because restart recovery requires order state
+# across Pod replacement. Confirm a default dynamic StorageClass exists, or set
+# persistence.existingClaim before installing.
 persistence:
   enabled: true
   size: 1Gi
+# Recommended: restrict the API-port egress rule to the observed API endpoint.
+networkPolicy:
+  egress:
+    apiServerCIDRs:
+      - 10.96.0.1/32  # replace; do not copy this example blindly
 ```
 
 Then install directly:
@@ -387,7 +393,8 @@ kubectl -n "$NAMESPACE" apply -f "$RUN_DIR/pods_default"
 
 For the production gate profile, generate the custom set with
 `--scheduler-name default-scheduler --scheduling-gate ml.scheduler/release`.
-Never add the gate to an unpaired default baseline.
+This automatically adds the execution-container annotation and production
+CPU/memory bounds. Never add the gate to an unpaired default baseline.
 
 Before submission:
 

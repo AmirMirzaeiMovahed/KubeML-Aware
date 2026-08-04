@@ -70,7 +70,7 @@ from k8s.work_model import (  # noqa: E402
 
 PLAN_SCHEMA_VERSION = "1.2"
 DEFAULT_PLAN = Path(__file__).with_name("scenarios.yaml")
-SCHEDULE_SCHEMA_VERSION = 2
+SCHEDULE_SCHEMA_VERSION = 3
 DEFAULT_SCHEDULER_DEPLOYMENT = "ml-ai-scheduler-ml-ai-scheduler"
 DEFAULT_SCHEDULER_CONTAINER = "scheduler"
 DEFAULT_SCHEDULER_RESULTS_TEMPLATE = "/results/schedule-{run_id}.json"
@@ -1064,6 +1064,15 @@ def validate_scheduler_record(
         for job in (result_document.get("jobs") or [])
         if isinstance(job, Mapping)
     }
+    submission_jobs = (
+        (((result_document.get("environment") or {}).get("submission") or {}).get("jobs"))
+        or []
+    )
+    submitted_uids = {
+        item.get("job_id"): item.get("uid")
+        for item in submission_jobs
+        if isinstance(item, Mapping)
+    }
     record_ids = [record.get("job_id") for record in records if isinstance(record, Mapping)]
     if len(record_ids) != len(set(record_ids)) or set(record_ids) != set(jobs):
         errors.append("scheduler record job set differs from collected result")
@@ -1077,6 +1086,11 @@ def validate_scheduler_record(
     for record in ordered:
         job_id = record.get("job_id")
         job = jobs.get(job_id)
+        pod_uid = record.get("pod_uid")
+        if not isinstance(pod_uid, str) or not pod_uid:
+            errors.append(f"scheduler record {job_id!r} has no pod_uid")
+        elif submitted_uids.get(job_id) not in (None, pod_uid):
+            errors.append(f"scheduler Pod UID differs for {job_id!r}")
         if record.get("status") != "execution_started":
             errors.append(f"scheduler record for {job_id!r} is not execution_started")
         for field in ("rank", "bind_time", "exec_start_time"):

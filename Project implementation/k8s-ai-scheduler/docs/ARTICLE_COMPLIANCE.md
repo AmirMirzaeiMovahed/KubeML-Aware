@@ -134,6 +134,13 @@ affinity handling, and binding. This profile improves Kubernetes compatibility
 but is not numerically comparable to manual-binding article runs unless it is
 reported as a separate experimental configuration.
 
+Production state uses schema-versioned atomic records on a PVC. On restart the
+controller re-lists the complete run, verifies Pod UIDs and the deterministic
+rank/order, reconciles already removed gates, and resumes only unreleased work.
+Failed/corrupt state is never replayed and degrades readiness for operator
+attention. Multi-container workloads must identify the execution container;
+generated gated workloads also receive default CPU and memory bounds.
+
 ## Infrastructure compliance
 
 | Control | Repository implementation | Acceptance state |
@@ -146,12 +153,13 @@ reported as a separate experimental configuration.
 | Secret hygiene | pull-secret references only | Server secret mechanism pending |
 | Read-only filesystem | container security context plus bounded `/tmp` and `/results` | Server pending |
 | Probes/metrics | `/livez`, `/readyz`, `/metrics` on 8080 | Server pending |
-| NetworkPolicy | ingress limited to namespace/additional selectors | CNI enforcement pending |
-| Resource controls | scheduler requests/limits | Server pending |
+| NetworkPolicy | ingress selectors plus API-port egress isolation and optional API CIDRs | CNI enforcement pending |
+| Resource controls | scheduler plus generated gated-workload requests/limits | Server pending |
 | Rollout/rollback | atomic Helm install and revision rollback | Server pending |
 | HPA | intentionally omitted | Multiple active controllers are unsafe without leader election |
 | Ingress | intentionally omitted | No public service is required |
-| PDB | supplied but disabled | Enable only after replica/leader-election design changes |
+| Recovery/PVC | Pod UID-bound atomic resume state; production PVC enabled | Replacement smoke pending |
+| PDB | enabled for the single production controller | Eviction smoke pending |
 | ServiceMonitor | supplied but disabled | Requires Prometheus Operator CRD |
 
 The automated evidence chain additionally locks the expanded plan by SHA-256,

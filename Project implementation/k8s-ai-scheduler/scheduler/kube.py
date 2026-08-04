@@ -8,7 +8,7 @@ import re
 import time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Tuple
 
 from kubernetes import config
 from kubernetes.client import exceptions as kube_exceptions

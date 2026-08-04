@@ -14,7 +14,7 @@ import os
 import signal
 import sys
 import time
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,11 +27,9 @@ from scheduler.burst import (  # noqa: E402
     RunSettings,
     extract_features,
     group_pods_by_run,
-    pod_run_id,
     run_settings_for_pods,
 )
 from scheduler.config import ConfigurationError, SchedulerConfig  # noqa: E402
-from scheduler.constants import ANNOTATION_MAP  # noqa: E402
 from scheduler.execution import ExecutionStartError, wait_for_execution_start  # noqa: E402
 from scheduler.kube import (  # noqa: E402
     ApiFailureKind,
@@ -39,7 +37,6 @@ from scheduler.kube import (  # noqa: E402
     api_timeout,
     call_with_retries,
     load_kubernetes_configuration,
-    parse_cpu_quantity,
     validate_target_node,
 )
 from scheduler.pacing import (  # noqa: E402
@@ -499,7 +496,12 @@ class MLAwareScheduler:
         store.initialize()
         store.set_status("running")
         records = [
-            ScheduleRecord(job.job_id, index, ranks[job.job_id])
+            ScheduleRecord(
+                job.job_id,
+                index,
+                ranks[job.job_id],
+                pod_uid=str(pods_by_name[job.job_id].metadata.uid),
+            )
             for index, job in enumerate(ordered, start=1)
         ]
         for record in records:
