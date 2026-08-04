@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from scheduler.rank import JobFeatures
-from sim.plot_results import mean_ecdf_iqr
+from sim.plot_results import PACING_CONFIG_ORDER, mean_ecdf_iqr
 from sim.run_experiments import SimulationSettings, main_comparison
 from sim.simulate import (
     SimulationIncompleteError,
@@ -71,6 +71,17 @@ def test_mean_ecdf_and_iqr_are_computed_across_runs():
     assert mean == pytest.approx([0.25, 0.75, 1.0])
     assert lower == pytest.approx([0.125, 0.625, 1.0])
     assert upper == pytest.approx([0.375, 0.875, 1.0])
+
+
+def test_pacing_plot_order_contains_each_registered_configuration_once():
+    assert len(PACING_CONFIG_ORDER) == len(set(PACING_CONFIG_ORDER))
+    assert PACING_CONFIG_ORDER[:5] == (
+        "default",
+        "custom-baseline",
+        "custom-delay-1s",
+        "custom-delay-2s",
+        "custom-delay-5s",
+    )
 
 
 def test_simulation_outputs_paired_effects_and_exploratory_label(tmp_path):

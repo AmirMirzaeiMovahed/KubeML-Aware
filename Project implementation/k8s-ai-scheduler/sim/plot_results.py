@@ -17,6 +17,14 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = ROOT / "results"
 CONFIGS = ["default", "custom-baseline", "custom-adaptive", "reversed"]
+PACING_CONFIG_ORDER = (
+    "default",
+    "custom-baseline",
+    "custom-delay-1s",
+    "custom-delay-2s",
+    "custom-delay-5s",
+    "custom-adaptive",
+)
 COLORS = {
     "default": "#e67e22",
     "custom-baseline": "#3498db",
@@ -127,16 +135,7 @@ def plot_scenario(
 
 
 def plot_pacing_sweep(pacing_df: pd.DataFrame, out_path: str | os.PathLike[str]) -> None:
-    order = [
-        "default",
-        "custom-baseline",
-        "custom-baseline",
-        "custom-delay-1s",
-        "custom-delay-2s",
-        "custom-delay-5s",
-        "custom-adaptive",
-    ]
-    order = [config for config in order if config in set(pacing_df.config)]
+    order = [config for config in PACING_CONFIG_ORDER if config in set(pacing_df.config)]
     means = pacing_df.groupby("config")[["avg_ilt", "avg_jct", "makespan"]].mean().reindex(order)
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     x = np.arange(len(order))
