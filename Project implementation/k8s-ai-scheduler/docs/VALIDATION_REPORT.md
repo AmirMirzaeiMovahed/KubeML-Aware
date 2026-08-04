@@ -15,11 +15,11 @@ image build, registry push, server-side dry run, or live deployment.
 - Article plan lock: `experiments/locks/article-70.json`
   - schema 1.2; 70 runs; 25 pacing + 45 main
   - canonical plan SHA-256:
-    `cbf086b483587d6659b149f2c1c2990b7ca27a2a85a8eaebaf92bb1cf0cc7c89`
+    `6076e7863c7b2507baf856c3f78750f594f834590847a0d1f403758b8bac4566`
 - Extended plan lock: `experiments/locks/extended-90.json`
   - schema 1.2; 90 runs; 30 pacing + 60 main
   - canonical plan SHA-256:
-    `70dfe87e47c5fafc028401c7309844694eac9d5f6af0ae1171c9adcc91a7dde0`
+    `a383708fc9cecaec48d573716687a51d9ef9d379d5e9a932029e2487f688b52c`
 - Release builder: `python scripts/build_release.py`
   - creates the standard wheel and sdist under the ignored `dist/` directory;
   - writes their current SHA-256 values to `dist/SHA256SUMS.txt` after build;

@@ -119,10 +119,12 @@ and writes plus `fsync`s bounded checkpoints every `C` steps. Every Pod and
 terminal log records the model version, and strict collection rejects stale or
 incomplete work-model evidence.
 
-The ambiguous half-load profile is operationalized as 50% of aggregate
-estimated physical work. A deterministic burst-level search selects one global
-`M` scale (rather than blindly halving a cubic dimension), recomputes `T`, and
-stores the target, achieved ratio, tolerance, and selected scale in `jobs.json`.
+The article defines half load only as reduced computational demand through
+smaller matrices; it does not publish a numeric scale. This repository
+operationalizes that ambiguity as 50% of aggregate estimated physical work. A
+deterministic burst-level search selects one global `M` scale, recomputes `T`,
+and stores the assumption, target, achieved ratio, tolerance, and selected
+scale in `jobs.json`.
 
 ## Kubernetes packaging
 

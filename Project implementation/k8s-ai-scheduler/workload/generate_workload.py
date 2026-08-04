@@ -1,11 +1,12 @@
 """Deterministic synthetic workload generation for the paper reproduction.
 
 The article defines four workload categories but does not publish the exact
-sampling distributions.  ``CATEGORY_RANGES`` therefore remains an explicit,
-versioned project assumption.  The article's half-load scenario is represented
-by halving only matrix dimension ``M``; the duration estimate ``T`` is then
-recomputed from the versioned work model.  The selected profile and every
-assumption are written to ``jobs.json`` so a run can be audited later.
+sampling distributions or the numeric transformation used for half load.
+``CATEGORY_RANGES`` and the half-load calibration therefore remain explicit,
+versioned project assumptions.  Half load changes only matrix dimension ``M``;
+the duration estimate ``T`` is then recomputed from the versioned work model.
+The selected profile and every assumption are written to ``jobs.json`` so a
+run can be audited later.
 
 The command produces two byte-stable manifest sets from one sampled burst:
 ``pods_default`` and ``pods_custom``.  Existing non-empty output directories
@@ -89,6 +90,7 @@ LOAD_PROFILES: Dict[str, Dict[str, Any]] = {
         "target_estimated_work_ratio": 1.0,
         "calibration_feature": None,
         "calibration_method": "identity",
+        "provenance": "article-defined-scenario",
         "description": "Article normal-load profile; sampled features are unchanged.",
     },
     "half": {
@@ -96,10 +98,15 @@ LOAD_PROFILES: Dict[str, Dict[str, Any]] = {
         "target_estimated_work_ratio": 0.5,
         "calibration_feature": "M",
         "calibration_method": "deterministic-global-bisection-v1",
+        "provenance": "repository-operationalization-of-article-ambiguity",
+        "article_statement": (
+            "All jobs have reduced computational demand through smaller matrix sizes."
+        ),
         "description": (
-            "Article half-load profile: one deterministic global M scale targets "
-            "50% aggregate estimated physical work; R, G, C, and P are unchanged "
-            "and T is re-estimated."
+            "Repository half-load assumption: one deterministic global M scale "
+            "targets 50% aggregate estimated physical work; R, G, C, and P are "
+            "unchanged and T is re-estimated. The article does not publish the "
+            "numeric scale."
         ),
     },
 }

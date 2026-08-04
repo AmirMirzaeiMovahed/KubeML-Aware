@@ -60,7 +60,7 @@ published measurements have already been reproduced.
 | Identical default/custom workload | deterministic paired generation | Implemented/local; server pairing pending |
 | 12 jobs normal | `12-normal` | Server pending |
 | 48 jobs normal | `48-normal` | Server pending |
-| 48 jobs half | `48-half`; deterministic `M` calibration targets 50% aggregate modeled work | Implemented/local; server pending |
+| 48 jobs half | `48-half`; the article says only "smaller matrix sizes"; repository assumption calibrates `M` to 50% aggregate modeled work and records the achieved ratio | Implemented/local; server pending |
 | Fixed pacing 0, 1, 2, 5 seconds | pacing block | Server pending |
 | Default baseline | `default` | Server pending |
 | Intended custom order | `custom-baseline` (plus fixed-delay variants) | Server pending |
@@ -171,7 +171,7 @@ until strict collection and evidence validation succeed.
 ## Known article ambiguities that cannot be invented
 
 Exact original feature ranges/proportions, random seeds, calibration method for
-rank weights, training constants, burst duration,
+rank weights, numeric half-load transformation, training constants, burst duration,
 software versions, host hardware, percentile interpolation, and complete node
 filtering logic are not fully specified by the article. Repository choices for
 these items must be recorded as reproduction assumptions, not attributed to

@@ -77,6 +77,9 @@ def test_workload_document_records_half_load_calibration():
         repetition=0,
     )
     calibration = document["load_calibration"]
+    profile = document["profile"]
+    assert profile["provenance"] == "repository-operationalization-of-article-ambiguity"
+    assert "does not publish the numeric scale" in profile["description"]
     assert calibration["method"] == "deterministic-global-bisection-v1"
     assert calibration["work_model_version"] == WORK_MODEL_VERSION
     assert calibration["within_tolerance"] is True

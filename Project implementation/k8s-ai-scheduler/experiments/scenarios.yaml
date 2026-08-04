@@ -132,13 +132,18 @@ load_profiles:
     target_estimated_work_ratio: 1.0
     calibration_feature: null
     calibration_method: identity
+    provenance: article-defined-scenario
     description: Sampled features are unchanged.
   half:
     feature_scales: {}
     target_estimated_work_ratio: 0.5
     calibration_feature: M
     calibration_method: deterministic-global-bisection-v1
+    provenance: repository-operationalization-of-article-ambiguity
+    article_statement: >-
+      All jobs have reduced computational demand through smaller matrix sizes.
     description: >-
-      Article half-load profile: one deterministic global M scale targets 50%
-      aggregate estimated physical work; R, G, C, and P remain unchanged, and
-      T is re-estimated. Calibration evidence is embedded in every workload.
+      Repository half-load assumption: one deterministic global M scale targets
+      50% aggregate estimated physical work; R, G, C, and P remain unchanged,
+      and T is re-estimated. The article does not publish the numeric scale.
+      Calibration evidence is embedded in every workload.
