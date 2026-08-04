@@ -13,7 +13,6 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
-sys.path.append(str(ROOT / "sim"))
 from experiments.run_cluster import (  # noqa: E402
     DEFAULT_PLAN,
     expand_plan,
@@ -21,11 +20,9 @@ from experiments.run_cluster import (  # noqa: E402
     validate_result_for_spec,
 )
 from experiments.schema import RESULT_SCHEMA_VERSION, validate_result_document  # noqa: E402
-from experiments.statistics import (  # noqa: E402
-    mean_ci95 as _mean_ci95,
-    paired_improvement_table,
-)
-from plot_results import plot_pacing_sweep, plot_scenario  # noqa: E402
+from experiments.statistics import mean_ci95 as _mean_ci95  # noqa: E402
+from experiments.statistics import paired_improvement_table  # noqa: E402
+from sim.plot_results import plot_pacing_sweep, plot_scenario  # noqa: E402
 
 
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:

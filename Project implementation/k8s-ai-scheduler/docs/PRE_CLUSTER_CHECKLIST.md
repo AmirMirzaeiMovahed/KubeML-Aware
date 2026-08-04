@@ -7,9 +7,9 @@ output is captured.
 
 ## A. Repository and local quality gates
 
-- [x] A clean source backup exists at
-      `dist/k8s-ai-scheduler-0.1.0-source.zip`; integrity and checksum sidecar
-      are verified locally. Copy it off-host before deployment.
+- [x] `python scripts/build_release.py` produces a clean wheel, standard sdist,
+      and `dist/SHA256SUMS.txt`; the archives are ignored by Git and were
+      verified locally. Copy them off-host before deployment.
 - [x] Direct dependencies are exactly pinned and transitive resolution is
       frozen in `constraints.txt` for the release candidate.
 - [x] Python version contract is `>=3.11,<3.13`.
@@ -31,8 +31,11 @@ output is captured.
 - [x] Exact dependency versions import successfully and `python -m pip check`
       reports no broken requirements in the prepared local environment.
 - [x] `pyproject.toml`, `Chart.yaml`, and all four plain values files parse.
-- [x] `python -m pytest` passes: 88 passed, no skipped tests (local release
+- [x] `python -m pytest` passes: 121 passed, no skipped tests (local release
       candidate validation).
+- [x] `python -m ruff check .` passes with the repository-owned rule set.
+- [x] CI runs locked installs, lint, compile, tests, and plan validation on
+      Python 3.11 and 3.12, then builds and installs the release wheel.
 - [x] `helm lint deploy/helm/ml-ai-scheduler` passes with Helm 4.2.0.
 - [x] Production, fixed reproduction, and dynamic matrix Helm profiles render
       without errors and pass strict Kubernetes 1.36 offline schema validation.

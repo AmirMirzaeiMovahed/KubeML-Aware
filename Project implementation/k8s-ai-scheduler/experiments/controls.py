@@ -16,7 +16,6 @@ from k8s.work_model import (
     WORK_MODEL_VERSION,
 )
 
-
 CONTROL_SCHEMA_VERSION = "1.0"
 PREWARM_CONTROL_LABEL = "ml.scheduler/control"
 PREWARM_CONTROL_VALUE = "trainer-prewarm"

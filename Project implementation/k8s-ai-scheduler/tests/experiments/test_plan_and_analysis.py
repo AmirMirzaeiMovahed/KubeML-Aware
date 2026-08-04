@@ -24,7 +24,6 @@ from experiments.run_cluster import (
 from experiments.schema import make_result_document
 from k8s.work_model import WORK_MODEL_VERSION
 
-
 TRAINER_IMAGE = "registry.example/ml-sim@sha256:" + "a" * 64
 
 

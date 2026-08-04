@@ -14,7 +14,7 @@ from scheduler.constants import (
     RUN_ID_ANNOTATION,
     RUN_ID_LABEL,
 )
-from scheduler.custom_scheduler import MLAwareScheduler, ManualBindingSafetyError
+from scheduler.custom_scheduler import ManualBindingSafetyError, MLAwareScheduler
 from scheduler.gate_controller import ControllerStopping, SchedulingGateController
 
 

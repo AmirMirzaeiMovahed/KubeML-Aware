@@ -8,7 +8,6 @@ import statistics
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
-
 RESULT_SCHEMA_VERSION = "1.1"
 RESULT_KIND = "ml-scheduler-experiment-run"
 FEATURE_NAMES = ("T", "R", "M", "G", "C", "P")
@@ -74,7 +73,7 @@ def summarize_jobs(jobs: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     starts = sorted(float(job["execution_start_time"]) for job in completed)
     submissions = [float(job["submission_time"]) for job in completed]
     completions = [float(job["completion_time"]) for job in completed]
-    inter_launch = [right - left for left, right in zip(starts, starts[1:])]
+    inter_launch = [right - left for left, right in zip(starts, starts[1:], strict=False)]
     p95 = percentile(jcts, 0.95)
     summary.update({
         "avg_jct": statistics.fmean(jcts),

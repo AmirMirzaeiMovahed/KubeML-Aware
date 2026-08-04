@@ -35,7 +35,6 @@ from k8s.work_model import (
     validate_characteristics,
 )
 
-
 # NumPy/BLAS reads these variables during import.  Force a reproducible default
 # while still allowing operators to choose a different count through the single
 # documented ML_NUM_THREADS setting.
@@ -55,7 +54,6 @@ os.environ["OMP_DYNAMIC"] = "FALSE"
 
 import numpy as np  # noqa: E402  (must follow BLAS environment setup)
 from threadpoolctl import threadpool_info, threadpool_limits  # noqa: E402
-
 
 _BLAS_LIMITER = threadpool_limits(limits=int(_THREADS), user_api="blas")
 

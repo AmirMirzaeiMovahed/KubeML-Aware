@@ -387,10 +387,10 @@ class SchedulingGateController:
             ]
             try:
                 call_with_retries(
-                    lambda: self.v1.patch_namespaced_pod(
+                    lambda _patch=patch: self.v1.patch_namespaced_pod(
                         pod_name,
                         self.config.namespace,
-                        patch,
+                        _patch,
                         _content_type="application/json-patch+json",
                         _request_timeout=api_timeout(self.config.api_timeout),
                     ),
@@ -580,7 +580,7 @@ class SchedulingGateController:
             )
         pacer = self._pacer(settings, store=store)
         try:
-            for index, (job, record) in enumerate(zip(ordered, records)):
+            for index, (job, record) in enumerate(zip(ordered, records, strict=True)):
                 if self._stop:
                     raise ControllerStopping("shutdown requested before next release")
                 pod = pods_by_name[job.job_id]

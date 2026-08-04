@@ -10,7 +10,6 @@ from experiments.controls import (
 )
 from experiments.run_cluster import wait_for_cooldown
 
-
 IMAGE = "registry.example/ml-sim@sha256:" + "a" * 64
 
 

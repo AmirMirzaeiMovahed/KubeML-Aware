@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from k8s.work_model import WORK_MODEL_VERSION, estimate_work
 from results.metrics_collector import FEATURE_ANNOTATIONS as COLLECTOR_FEATURE_ANNOTATIONS
 from scheduler.constants import (
     ANNOTATION_MAP,
@@ -23,7 +24,6 @@ from workload.generate_workload import (
     prepare_output_directory,
     to_pod_yaml,
 )
-from k8s.work_model import WORK_MODEL_VERSION, estimate_work
 
 
 def test_metadata_contracts_cannot_drift_between_components():
@@ -48,7 +48,7 @@ def test_burst_is_deterministic_and_ids_depend_on_seed_and_index():
 def test_half_profile_scales_matrix_and_reestimates_duration():
     normal = generate_burst(40, seed=987, load="normal")
     half = generate_burst(40, seed=987, load="half")
-    for full_job, half_job in zip(normal, half):
+    for full_job, half_job in zip(normal, half, strict=True):
         assert full_job.job_id == half_job.job_id
         assert half_job.P <= half_job.M <= full_job.M
         for feature in ("R", "G", "C", "P"):

@@ -24,6 +24,14 @@ sys.path.append(str(Path(__file__).resolve().parent))
 sys.path.append(str(ROOT / "workload"))
 sys.path.append(str(ROOT))
 from generate_workload import category_for_job, generate_burst  # noqa: E402
+
+from experiments.schema import (  # noqa: E402
+    RESULT_SCHEMA_VERSION,
+    make_result_document,
+    summarize_jobs,
+    validate_result_document,
+)
+from experiments.statistics import paired_improvement_table  # noqa: E402
 from sim.calibration import load_calibrated_model  # noqa: E402
 from sim.simulate import (  # noqa: E402
     SimResult,
@@ -32,14 +40,6 @@ from sim.simulate import (  # noqa: E402
     run_default,
     run_paced,
 )
-from experiments.schema import (  # noqa: E402
-    RESULT_SCHEMA_VERSION,
-    make_result_document,
-    summarize_jobs,
-    validate_result_document,
-)
-from experiments.statistics import paired_improvement_table  # noqa: E402
-
 
 N_CORES = 4
 INHERENT_GAP = 1.0

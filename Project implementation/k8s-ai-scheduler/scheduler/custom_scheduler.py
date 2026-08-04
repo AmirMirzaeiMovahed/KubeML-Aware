@@ -515,7 +515,7 @@ class MLAwareScheduler:
 
         pacer = self._pacer(settings, store=store)
         try:
-            for index, (job, record) in enumerate(zip(ordered, records)):
+            for index, (job, record) in enumerate(zip(ordered, records, strict=True)):
                 pod = pods_by_name[job.job_id]
                 self._validate_pod_for_manual_binding(pod)
                 record.bind_time = self.wall_time()

@@ -23,6 +23,20 @@ try {
         throw "Runtime dependencies are missing or incompatible. Run: $Python -m pip install -r requirements-dev.txt"
     }
 
+    & $Python -m pip check
+    if ($LASTEXITCODE -ne 0) { throw "Installed dependency validation failed." }
+
+    & $Python -m ruff check .
+    if ($LASTEXITCODE -ne 0) { throw "Ruff quality gate failed." }
+
+    & $Python -m experiments.run_cluster `
+        --plan-out experiments/locks/article-70.json
+    if ($LASTEXITCODE -ne 0) { throw "Article plan lock validation failed." }
+    & $Python -m experiments.run_cluster `
+        --include-adaptive `
+        --plan-out experiments/locks/extended-90.json
+    if ($LASTEXITCODE -ne 0) { throw "Extended plan lock validation failed." }
+
     if (-not $SkipTests) {
         & $Python -m pytest
         if ($LASTEXITCODE -ne 0) { throw "Test suite failed." }

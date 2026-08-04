@@ -20,19 +20,17 @@ image build, registry push, server-side dry run, or live deployment.
   - schema 1.2; 90 runs; 30 pacing + 60 main
   - canonical plan SHA-256:
     `70dfe87e47c5fafc028401c7309844694eac9d5f6af0ae1171c9adcc91a7dde0`
-- Wheel: `dist/k8s_ai_scheduler-0.1.0-py3-none-any.whl`
-  - file SHA-256:
-    `39c3ed7c4566134e4c4d53afade5c6423e40f78f5ab4dea6f668eeac21de8017`
-- Clean source archive: `dist/k8s-ai-scheduler-0.1.0-source.zip`
-  - excludes `.venv`, caches, build directories, and validation scratch data;
-  - archive integrity and required-content checks passed;
-  - final checksum is recorded in `dist/SHA256SUMS.txt`.
+- Release builder: `python scripts/build_release.py`
+  - creates the standard wheel and sdist under the ignored `dist/` directory;
+  - writes their current SHA-256 values to `dist/SHA256SUMS.txt` after build;
+  - avoids a stale checksum in version-controlled documentation.
 
 ## Completed local gates
 
 | Gate | Result |
 |---|---|
 | Exact dependency imports and `pip check` | Passed; no broken requirements |
+| Ruff quality gate | Passed repository-wide |
 | Python compile check | Passed for scheduler, workload, trainer, results, simulation, and experiments |
 | Automated tests | **121 passed**, zero skipped/failing |
 | PowerShell parser validation | Passed |
@@ -56,7 +54,8 @@ image build, registry push, server-side dry run, or live deployment.
 | Simulator calibration | Content-addressed hardware benchmark CLI and tamper/stale-model rejection passed |
 | Paired inference | Baseline-minus-candidate effects and Student-t 95% CIs by scenario/repetition/seed passed |
 | Wheel build/install | Built, contents inspected, installed outside the source directory, resources and 70/90 plans imported successfully |
-| Clean source backup | Archive contents/integrity verified; checksum sidecar supplied |
+| Release archives | Standard wheel and sdist built; checksum sidecar generated |
+| CI contract | Locked Python 3.11/3.12 tests plus Helm/package job committed |
 
 The reproducible local command is:
 

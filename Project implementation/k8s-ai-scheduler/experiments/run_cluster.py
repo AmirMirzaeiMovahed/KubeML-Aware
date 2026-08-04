@@ -39,18 +39,7 @@ from generate_workload import (  # noqa: E402
     to_pod_yaml,
     write_pod_manifests,
 )
-from experiments.schema import (  # noqa: E402
-    IncompleteRunError,
-    validate_result_document,
-)
-from experiments.environment import (  # noqa: E402
-    ArticleEnvironmentError,
-    validate_article_environment,
-)
-from experiments.submission import (  # noqa: E402
-    BurstSubmissionError,
-    submit_burst,
-)
+
 from experiments.controls import (  # noqa: E402
     DEFAULT_COOLDOWN_CLEAN_POLLS,
     DEFAULT_COOLDOWN_SECONDS,
@@ -61,12 +50,23 @@ from experiments.controls import (  # noqa: E402
     validate_minikube_attestation,
     validate_prewarm_observation,
 )
-from results.metrics_collector import collect  # noqa: E402
+from experiments.environment import (  # noqa: E402
+    ArticleEnvironmentError,
+    validate_article_environment,
+)
+from experiments.schema import (  # noqa: E402
+    IncompleteRunError,
+    validate_result_document,
+)
+from experiments.submission import (  # noqa: E402
+    BurstSubmissionError,
+    submit_burst,
+)
 from k8s.work_model import (  # noqa: E402
     REPRODUCTION_BLAS_THREADS,
     WORK_MODEL_VERSION,
 )
-
+from results.metrics_collector import collect  # noqa: E402
 
 PLAN_SCHEMA_VERSION = "1.2"
 DEFAULT_PLAN = Path(__file__).with_name("scenarios.yaml")
@@ -1111,7 +1111,7 @@ def validate_scheduler_record(
         if isinstance(record.get("rank"), (int, float)):
             ranks.append(float(record["rank"]))
     if len(ranks) == spec.jobs:
-        pairs = zip(ranks, ranks[1:])
+        pairs = zip(ranks, ranks[1:], strict=False)
         order_is_valid = all(
             left <= right + 1e-12 if spec.reverse else left + 1e-12 >= right
             for left, right in pairs
@@ -1714,7 +1714,8 @@ def build_burst_submitter(
 ) -> tuple[Callable[[Path, RunSpec], Mapping[str, Any]], Any]:
     """Build one pooled Kubernetes API client for all registered bursts."""
 
-    from kubernetes import client, config as kubernetes_config
+    from kubernetes import client
+    from kubernetes import config as kubernetes_config
 
     configuration = client.Configuration()
     kubernetes_config.load_kube_config(

@@ -12,7 +12,6 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
-
 WORK_MODEL_VERSION = "2.0"
 WORK_MODEL_ANNOTATION = "ml.scheduler/work-model-version"
 WORK_MODEL_ENV = "ML_WORK_MODEL_VERSION"

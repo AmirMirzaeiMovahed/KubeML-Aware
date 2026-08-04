@@ -26,8 +26,12 @@ except ImportError:  # pragma: no cover - exercised only in minimal environments
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
-from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
-from workload.generate_workload import deterministic_job_seed  # noqa: E402
+from experiments.schema import (  # noqa: E402
+    IncompleteRunError,
+    make_result_document,
+    summarize_jobs,
+    validate_result_document,
+)
 from k8s.work_model import (  # noqa: E402
     BLAS_THREADS_ANNOTATION,
     BLAS_THREADS_ENV,
@@ -37,13 +41,8 @@ from k8s.work_model import (  # noqa: E402
     WORK_MODEL_VERSION,
     estimate_work,
 )
-from experiments.schema import (  # noqa: E402
-    IncompleteRunError,
-    make_result_document,
-    summarize_jobs,
-    validate_result_document,
-)
-
+from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
+from workload.generate_workload import deterministic_job_seed  # noqa: E402
 
 FEATURE_ANNOTATIONS = {
     "T": "ml.scheduler/estimated-training-time",

@@ -4,11 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from experiments.schema import IncompleteRunError, percentile
 import results.metrics_collector as metrics_collector
+from experiments.schema import IncompleteRunError, percentile
+from k8s.work_model import WORK_MODEL_VERSION, estimate_work
 from results.metrics_collector import collect, parse_log_events
 from workload.generate_workload import deterministic_job_seed
-from k8s.work_model import WORK_MODEL_VERSION, estimate_work
 
 
 def _pod(name="light-000-12345678", phase="Succeeded"):

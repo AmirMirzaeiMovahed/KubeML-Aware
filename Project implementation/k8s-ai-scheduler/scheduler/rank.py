@@ -11,7 +11,6 @@ import math
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
-
 FEATURES: Tuple[str, ...] = ("T", "R", "M", "G", "C", "P")
 WEIGHTS: Dict[str, float] = {
     "T": 0.40,

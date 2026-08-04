@@ -45,7 +45,6 @@ from k8s.work_model import (  # noqa: E402
 from scheduler.constants import EXECUTION_CONTAINER_ANNOTATION  # noqa: E402
 from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
 
-
 WORKLOAD_SCHEMA_VERSION = "1.1"
 OUTPUT_SENTINEL = ".ml-scheduler-workload"
 FEATURE_NAMES = ("T", "R", "M", "G", "C", "P")

@@ -46,6 +46,8 @@ docs/                      Compliance and pre-cluster acceptance checklists
 - prometheus-client: `0.25.0`
 - pytest: `9.1.1`
 - kubernetes-validate schemas: `1.36.0`
+- Ruff: `0.16.1`
+- Python build frontend: `1.5.0`
 
 Direct dependencies are exactly pinned in `requirements.txt`; transitive
 resolution is frozen in `constraints.txt`. The two container images use
@@ -65,6 +67,19 @@ Set-ExecutionPolicy -Scope Process Bypass
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
 & .\scripts\preflight.ps1 -Python ".\.venv\Scripts\python.exe"
+```
+
+The preflight compiles the packages, checks the locked environment, runs Ruff
+and pytest, validates both immutable experiment plans, and (when Helm is
+available) lints and schema-validates every deployment profile. The same gates
+run on Python 3.11 and 3.12 in GitHub Actions.
+
+Build a wheel, source distribution, and checksum sidecar without committing
+generated archives:
+
+```powershell
+python .\scripts\build_release.py
+Get-Content .\dist\SHA256SUMS.txt
 ```
 
 Build and optionally push immutable, non-`latest` images:
