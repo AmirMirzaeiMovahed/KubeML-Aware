@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 import pandas as pd
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ARTICLE_REFERENCE = Path(__file__).with_name("article_reference.yaml")
 sys.path.append(str(ROOT))
 from experiments.run_cluster import (  # noqa: E402
     DEFAULT_PLAN,
@@ -149,6 +151,100 @@ def aggregate_run_metrics(summary: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def load_article_reference(path: Path = DEFAULT_ARTICLE_REFERENCE) -> Dict[str, Any]:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("article reference must be a YAML object")
+    if payload.get("schema_version") != "1.0":
+        raise ValueError("article reference schema_version must be '1.0'")
+    if payload.get("kind") != "ml-scheduler-published-article-reference":
+        raise ValueError("article reference kind is invalid")
+    if not isinstance(payload.get("results"), dict) or not isinstance(
+        payload.get("claims"), list
+    ):
+        raise ValueError("article reference requires results and claims")
+    return payload
+
+
+def compare_article_reference(
+    summary: pd.DataFrame, reference: Mapping[str, Any]
+) -> pd.DataFrame:
+    """Compare observed aggregates without inventing a pass/fail tolerance."""
+
+    rows: List[Dict[str, Any]] = []
+    for block, scenarios in reference["results"].items():
+        for scenario, configurations in scenarios.items():
+            for config, published in configurations.items():
+                observed_runs = summary[
+                    (summary.scenario == scenario) & (summary.config == config)
+                ]
+                if observed_runs.empty:
+                    continue
+                for metric, published_value in published["metrics"].items():
+                    observed_value = float(observed_runs[metric].mean())
+                    published_numeric = float(published_value)
+                    rows.append({
+                        "row_type": "aggregate_metric",
+                        "block": block,
+                        "scenario": scenario,
+                        "config": config,
+                        "metric": metric,
+                        "effect_kind": None,
+                        "reference_config": None,
+                        "comparison_config": None,
+                        "published_value": published_numeric,
+                        "observed_value": observed_value,
+                        "absolute_delta": observed_value - published_numeric,
+                        "relative_delta_pct": (
+                            100.0 * (observed_value - published_numeric) / published_numeric
+                        ),
+                        "source": published["source"],
+                    })
+
+    for claim in reference["claims"]:
+        scenario = claim["scenario"]
+        metric = claim["metric"]
+        reference_config = claim["reference_config"]
+        comparison_config = claim["comparison_config"]
+        reference_runs = summary[
+            (summary.scenario == scenario) & (summary.config == reference_config)
+        ]
+        comparison_runs = summary[
+            (summary.scenario == scenario) & (summary.config == comparison_config)
+        ]
+        if reference_runs.empty or comparison_runs.empty:
+            continue
+        reference_mean = float(reference_runs[metric].mean())
+        comparison_mean = float(comparison_runs[metric].mean())
+        if reference_mean <= 0:
+            raise ValueError("article comparison reference means must be > 0")
+        if claim["effect_kind"] == "improvement_vs_default":
+            observed_effect = 100.0 * (reference_mean - comparison_mean) / reference_mean
+        elif claim["effect_kind"] == "degradation_vs_intended":
+            observed_effect = 100.0 * (comparison_mean - reference_mean) / reference_mean
+        else:
+            raise ValueError(f"unknown article effect_kind {claim['effect_kind']!r}")
+        published_effect = float(claim["published_effect_pct"])
+        rows.append({
+            "row_type": "published_effect",
+            "block": "main",
+            "scenario": scenario,
+            "config": comparison_config,
+            "metric": metric,
+            "effect_kind": claim["effect_kind"],
+            "reference_config": reference_config,
+            "comparison_config": comparison_config,
+            "published_value": published_effect,
+            "observed_value": observed_effect,
+            "absolute_delta": observed_effect - published_effect,
+            "relative_delta_pct": None,
+            "source": claim["source"],
+        })
+    if not rows:
+        raise ValueError("no observed runs match the article reference")
+    return pd.DataFrame(rows)
+
+
 def improvement_table(aggregated: pd.DataFrame) -> List[Dict[str, Any]]:
     """Legacy ratio-of-means view retained for CSV compatibility."""
     comparisons: List[Dict[str, Any]] = []
@@ -182,6 +278,7 @@ def analyze(
     include_adaptive: bool = False,
     allow_partial: bool = False,
     make_plots: bool = True,
+    article_reference_path: Path = DEFAULT_ARTICLE_REFERENCE,
 ) -> Dict[str, Any]:
     documents = load_documents(runs_dir)
     if not documents:
@@ -200,6 +297,9 @@ def analyze(
     aggregate.to_csv(output_dir / "aggregate_metrics.csv", index=False)
     paired_effects = paired_effect_table(summary)
     paired_effects.to_csv(output_dir / "paired_effects.csv", index=False)
+    article_reference = load_article_reference(article_reference_path)
+    article_comparison = compare_article_reference(summary, article_reference)
+    article_comparison.to_csv(output_dir / "article_reference_comparison.csv", index=False)
 
     pacing = summary[summary.scenario == "48-half-pacing"]
     main = summary[summary.scenario != "48-half-pacing"]
@@ -222,6 +322,15 @@ def analyze(
         "strictly_complete": not missing,
         "improvements": improvements,
         "paired_effects": paired_effects.to_dict(orient="records"),
+        "article_reference": {
+            "schema_version": article_reference["schema_version"],
+            "comparison_rows": len(article_comparison),
+            "acceptance_threshold": None,
+            "interpretation": (
+                "Diagnostic deltas only; the article publishes no raw repetitions "
+                "or numeric acceptance interval."
+            ),
+        },
         "pairing_keys": ["scenario", "repetition", "seed"],
         "confidence_interval": (
             "Two-sided Student-t 95% CI over run-level metrics; scheduler "
@@ -248,6 +357,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument("--include-adaptive", action="store_true")
     parser.add_argument("--allow-partial", action="store_true")
     parser.add_argument("--no-plots", action="store_true")
+    parser.add_argument(
+        "--article-reference", type=Path, default=DEFAULT_ARTICLE_REFERENCE
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     report = analyze(
         runs_dir=args.runs_dir,
@@ -256,6 +368,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         include_adaptive=args.include_adaptive,
         allow_partial=args.allow_partial,
         make_plots=not args.no_plots,
+        article_reference_path=args.article_reference,
     )
     print(json.dumps(report, indent=2))
     return 0

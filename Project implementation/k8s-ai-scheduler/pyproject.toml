@@ -49,7 +49,7 @@ where = ["."]
 include = ["scheduler*", "workload*", "results*", "sim*", "experiments*", "k8s*", "scripts*"]
 
 [tool.setuptools.package-data]
-experiments = ["scenarios.yaml", "locks/*.json"]
+experiments = ["scenarios.yaml", "article_reference.yaml", "locks/*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

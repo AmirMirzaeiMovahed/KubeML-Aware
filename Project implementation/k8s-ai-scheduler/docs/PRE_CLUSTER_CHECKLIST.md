@@ -36,6 +36,8 @@ output is captured.
 - [x] `python -m ruff check .` passes with the repository-owned rule set.
 - [x] CI runs locked installs, lint, compile, tests, and plan validation on
       Python 3.11 and 3.12, then builds and installs the release wheel.
+- [x] Published Table I/Figures 2-4 values are transcribed in a versioned
+      package resource and the analyzer emits diagnostic observed deltas.
 - [x] `helm lint deploy/helm/ml-ai-scheduler` passes with Helm 4.2.0.
 - [x] Production, fixed reproduction, and dynamic matrix Helm profiles render
       without errors and pass strict Kubernetes 1.36 offline schema validation.

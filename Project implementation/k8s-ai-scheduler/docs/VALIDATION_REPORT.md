@@ -53,6 +53,7 @@ image build, registry push, server-side dry run, or live deployment.
 | Simulator smoke | Run/CSV/mean-ECDF/IQR plot generation passed; output remains proxy evidence only |
 | Simulator calibration | Content-addressed hardware benchmark CLI and tamper/stale-model rejection passed |
 | Paired inference | Default-minus-custom improvements and reversed-minus-intended degradations use paired Student-t 95% CIs by scenario/repetition/seed |
+| Published reference | Table I, Figures 2-4, and Section V-C aggregate claims are versioned and produce diagnostic observed deltas without an invented threshold |
 | Wheel build/install | Built, contents inspected, installed outside the source directory, resources and 70/90 plans imported successfully |
 | Release archives | Standard wheel and sdist built; checksum sidecar generated |
 | CI contract | Locked Python 3.11/3.12 tests plus Helm/package job committed |

@@ -6,6 +6,12 @@ extension in a separate evaluation track. Simulator output is exploratory;
 only completed, validated Kubernetes runs may be reported as article
 reproduction results.
 
+After a complete cluster matrix, the analyzer writes
+`article_reference_comparison.csv`, placing the observed aggregate metrics and
+effects beside Table I and Figures 2-4. The deltas are diagnostic, not a
+fabricated pass/fail threshold: the article does not publish raw repetitions or
+numeric confidence intervals from which such a threshold could be justified.
+
 ## Execution profiles
 
 | Profile | Purpose | Placement mechanism | Intended environment |

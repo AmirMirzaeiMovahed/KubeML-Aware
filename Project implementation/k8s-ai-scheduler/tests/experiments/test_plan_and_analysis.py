@@ -6,7 +6,12 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from experiments.analyze import _mean_ci95, analyze
+from experiments.analyze import (
+    _mean_ci95,
+    analyze,
+    compare_article_reference,
+    load_article_reference,
+)
 from experiments.controls import execution_controls_contract
 from experiments.run_cluster import (
     DEFAULT_PLAN,
@@ -222,6 +227,55 @@ def test_paired_effects_reject_missing_reference_pair():
         paired_effect_table(summary)
 
 
+def test_published_article_reference_preserves_table_and_ablation_semantics():
+    reference = load_article_reference()
+    table = reference["results"]["pacing"]["48-half-pacing"]
+    assert table["default"]["metrics"] == {
+        "avg_ilt": 0.67,
+        "avg_jct": 230.19,
+        "makespan": 443.0,
+    }
+    assert table["custom-baseline"]["metrics"]["avg_jct"] == 165.79
+
+    summary = pd.DataFrame([
+        {
+            "scenario": "12-normal",
+            "config": "default",
+            "avg_jct": 234.0,
+            "tail_jct_p95": 438.0,
+            "max_jct": 451.0,
+            "min_jct": 16.0,
+            "makespan": 451.0,
+        },
+        {
+            "scenario": "12-normal",
+            "config": "custom-baseline",
+            "avg_jct": 178.0,
+            "tail_jct_p95": 401.0,
+            "max_jct": 412.0,
+            "min_jct": 7.0,
+            "makespan": 412.0,
+        },
+        {
+            "scenario": "12-normal",
+            "config": "reversed",
+            "avg_jct": 178.0 * 1.49,
+            "tail_jct_p95": 450.0,
+            "max_jct": 470.0,
+            "min_jct": 10.0,
+            "makespan": 500.0,
+        },
+    ])
+    comparison = compare_article_reference(summary, reference)
+    degradation = comparison[
+        (comparison.row_type == "published_effect")
+        & (comparison.effect_kind == "degradation_vs_intended")
+    ].iloc[0]
+    assert degradation.reference_config == "custom-baseline"
+    assert degradation.observed_value == pytest.approx(49.0)
+    assert degradation.absolute_delta == pytest.approx(0.0)
+
+
 def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
     runs = tmp_path / "runs"
     runs.mkdir()
@@ -373,8 +427,10 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
     assert report["strictly_complete"] is True
     assert report["pairing_keys"] == ["scenario", "repetition", "seed"]
     assert report["paired_effects"]
+    assert report["article_reference"]["acceptance_threshold"] is None
     assert (tmp_path / "analysis" / "aggregate_metrics.csv").is_file()
     assert (tmp_path / "analysis" / "paired_effects.csv").is_file()
+    assert (tmp_path / "analysis" / "article_reference_comparison.csv").is_file()
 
 
 def _one_job_spec(*, reverse=False, pacing_mode="none", fixed_delay=0.0):

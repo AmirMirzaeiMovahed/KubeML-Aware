@@ -1,0 +1,61 @@
+schema_version: "1.0"
+kind: ml-scheduler-published-article-reference
+article: >-
+  Abdelshaheed and Ashour, Intelligent Scheduling of AI Tasks in Kubernetes,
+  ICCTA 2025, DOI 10.1109/ICCTA68914.2025.11519965
+disclosure: >-
+  These are published aggregate values transcribed for diagnostic comparison.
+  The article does not provide raw repetitions or numeric acceptance intervals,
+  so this file must not be used as a pass/fail tolerance.
+
+results:
+  pacing:
+    48-half-pacing:
+      default:
+        source: Table I
+        metrics: {avg_ilt: 0.67, avg_jct: 230.19, makespan: 443.0}
+      custom-baseline:
+        source: Table I, custom delay 0s
+        metrics: {avg_ilt: 5.82, avg_jct: 165.79, makespan: 410.0}
+      custom-delay-1s:
+        source: Table I
+        metrics: {avg_ilt: 6.82, avg_jct: 180.10, makespan: 427.0}
+      custom-delay-2s:
+        source: Table I
+        metrics: {avg_ilt: 7.77, avg_jct: 196.12, makespan: 442.0}
+      custom-delay-5s:
+        source: Table I
+        metrics: {avg_ilt: 10.52, avg_jct: 254.75, makespan: 528.0}
+  main:
+    12-normal:
+      custom-baseline:
+        source: Figure 2b
+        metrics: {avg_jct: 178.0, tail_jct_p95: 401.0, max_jct: 412.0, min_jct: 7.0, makespan: 412.0}
+      default:
+        source: Figure 2b
+        metrics: {avg_jct: 234.0, tail_jct_p95: 438.0, max_jct: 451.0, min_jct: 16.0, makespan: 451.0}
+    48-normal:
+      custom-baseline:
+        source: Figure 3b
+        metrics: {avg_jct: 645.0, tail_jct_p95: 1879.0, max_jct: 1973.0, min_jct: 6.0, makespan: 1973.0}
+      default:
+        source: Figure 3b
+        metrics: {avg_jct: 827.0, tail_jct_p95: 1959.0, max_jct: 2048.0, min_jct: 76.0, makespan: 2050.0}
+    48-half:
+      custom-baseline:
+        source: Figure 4b
+        metrics: {avg_jct: 182.0, tail_jct_p95: 433.0, max_jct: 445.0, min_jct: 6.0, makespan: 446.0}
+      default:
+        source: Figure 4b
+        metrics: {avg_jct: 271.0, tail_jct_p95: 482.0, max_jct: 496.0, min_jct: 63.0, makespan: 498.0}
+
+claims:
+  - {scenario: 12-normal, metric: avg_jct, effect_kind: improvement_vs_default, reference_config: default, comparison_config: custom-baseline, published_effect_pct: 23.8, source: Section V-C}
+  - {scenario: 48-normal, metric: avg_jct, effect_kind: improvement_vs_default, reference_config: default, comparison_config: custom-baseline, published_effect_pct: 22.0, source: Section V-C}
+  - {scenario: 48-half, metric: avg_jct, effect_kind: improvement_vs_default, reference_config: default, comparison_config: custom-baseline, published_effect_pct: 31.6, source: Section V-C}
+  - {scenario: 12-normal, metric: makespan, effect_kind: improvement_vs_default, reference_config: default, comparison_config: custom-baseline, published_effect_pct: 8.6, source: Section V-C}
+  - {scenario: 48-normal, metric: makespan, effect_kind: improvement_vs_default, reference_config: default, comparison_config: custom-baseline, published_effect_pct: 3.7, source: Section V-C}
+  - {scenario: 48-half, metric: makespan, effect_kind: improvement_vs_default, reference_config: default, comparison_config: custom-baseline, published_effect_pct: 10.2, source: Section V-C}
+  - {scenario: 12-normal, metric: avg_jct, effect_kind: degradation_vs_intended, reference_config: custom-baseline, comparison_config: reversed, published_effect_pct: 49.0, source: Section V-C ablation}
+  - {scenario: 48-normal, metric: avg_jct, effect_kind: degradation_vs_intended, reference_config: custom-baseline, comparison_config: reversed, published_effect_pct: 37.0, source: Section V-C ablation}
+  - {scenario: 48-half, metric: avg_jct, effect_kind: degradation_vs_intended, reference_config: custom-baseline, comparison_config: reversed, published_effect_pct: 58.0, source: Section V-C ablation}

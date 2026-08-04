@@ -95,6 +95,7 @@ retain independent run IDs.
 | IQR band | 25th/75th percentiles across run ECDFs | Plot and retain underlying numeric data |
 | Scheduler improvement CI | paired default-minus-custom differences by scenario/repetition/seed | Report Student-t 95% CI for absolute and percentage effects |
 | Reversed ablation CI | paired reversed-minus-intended-custom differences using intended custom as denominator | Positive percentage means degradation, matching the article |
+| Published aggregate comparison | versioned Table I/Figures 2-4 reference beside observed means and effects | Diagnostic deltas only; no invented pass/fail tolerance |
 | Reproducibility metadata | schema-versioned result records | Include seed, scenario, config, repetition, image digests, Kubernetes/node/tool versions |
 | Failure handling | strict collector | Any failed/missing/duplicate Pod invalidates the run |
 

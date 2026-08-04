@@ -102,7 +102,7 @@ jobs:
           python -m venv "$RUNNER_TEMP/wheel-check"
           "$RUNNER_TEMP/wheel-check/bin/python" -m pip install --no-deps dist/*.whl
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/wheel-check/bin/python" -c "import experiments, scheduler; from importlib.resources import files; assert files('experiments').joinpath('locks/article-70.json').is_file()"
+          "$RUNNER_TEMP/wheel-check/bin/python" -c "import experiments, scheduler; from importlib.resources import files; root=files('experiments'); assert root.joinpath('locks/article-70.json').is_file(); assert root.joinpath('article_reference.yaml').is_file()"
       - name: Upload release candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
