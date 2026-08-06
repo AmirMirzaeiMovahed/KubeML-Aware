@@ -136,13 +136,12 @@ class SingleNodeGateController:
         self.custom_api = custom_api or client.CustomObjectsApi()
 
         # Validate target node exists and is ready
-        self.node = validate_target_node(
+        validate_target_node(
             self.v1,
             self.target_node,
             timeout=self.config.api_timeout,
             retries=self.config.api_retries,
         )
-        self.node_name = self.target_node
 
         # A successful narrow list proves credentials and RBAC before readiness.
         call_with_retries(
@@ -546,7 +545,7 @@ class SingleNodeGateController:
             existing_by_job: Dict[str, ScheduleRecord] = {}
             for raw in store.records:
                 try:
-                    existing = ScheduleRecord(**raw)
+                    existing = ScheduleRecord.from_dict(raw)
                 except (TypeError, ValueError) as exc:
                     raise RecordStoreError(
                         f"invalid persisted record for {raw.get('job_id')!r}"

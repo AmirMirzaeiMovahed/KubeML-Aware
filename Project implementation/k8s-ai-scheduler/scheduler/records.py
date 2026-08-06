@@ -27,6 +27,31 @@ class ScheduleRecord:
     exec_start_time: Optional[float] = None
     error: Optional[str] = None
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, object]) -> "ScheduleRecord":
+        """Create ScheduleRecord from JSON-deserialized dict with type conversion."""
+        return cls(
+            job_id=str(data["job_id"]),
+            order=int(data["order"]),  # type: ignore[arg-type]
+            rank=float(data["rank"]),  # type: ignore[arg-type]
+            pod_uid=str(data["pod_uid"]) if data.get("pod_uid") else None,
+            status=str(data.get("status", "ranked")),
+            bind_time=(
+                float(data["bind_time"]) if data.get("bind_time") is not None else None
+            ),  # type: ignore[arg-type]
+            release_time=(
+                float(data["release_time"])
+                if data.get("release_time") is not None
+                else None
+            ),  # type: ignore[arg-type]
+            exec_start_time=(
+                float(data["exec_start_time"])
+                if data.get("exec_start_time") is not None
+                else None
+            ),  # type: ignore[arg-type]
+            error=str(data["error"]) if data.get("error") else None,
+        )
+
 
 class AtomicRecordStore:
     SCHEMA_VERSION = 3
@@ -86,7 +111,9 @@ class AtomicRecordStore:
                     f"{document.get('schema_version')!r}"
                 )
             if document.get("metadata") != self._document["metadata"]:
-                raise RecordStoreError("scheduler state metadata does not match the run")
+                raise RecordStoreError(
+                    "scheduler state metadata does not match the run"
+                )
             if document.get("status") not in self.VALID_STATUSES:
                 raise RecordStoreError("scheduler state has an invalid status")
             records = document.get("records")
@@ -96,7 +123,9 @@ class AtomicRecordStore:
             job_ids = []
             for record in records:
                 if not isinstance(record, dict):
-                    raise RecordStoreError("scheduler state contains a non-object record")
+                    raise RecordStoreError(
+                        "scheduler state contains a non-object record"
+                    )
                 job_id = record.get("job_id")
                 pod_uid = record.get("pod_uid")
                 if not isinstance(job_id, str) or not job_id:
