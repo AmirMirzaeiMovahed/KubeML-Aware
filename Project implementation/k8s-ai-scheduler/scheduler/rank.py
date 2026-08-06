@@ -1,8 +1,5 @@
-"""Validated implementation of the ranking function from the paper.
-
-The paper intentionally uses weights whose sum is 1.25.  They are kept
-verbatim because multiplying all scores by a constant does not change the
-ordering and changing them would no longer reproduce the published method.
+"""
+implementation of the ranking function
 """
 
 from __future__ import annotations
@@ -42,7 +39,7 @@ class JobFeatures:
 def validate_jobs(jobs: Iterable[JobFeatures]) -> List[JobFeatures]:
     """Return ``jobs`` as a list after strict, deterministic validation.
 
-    All six inputs describe positive quantities in the paper.  Missing,
+    All six inputs describe positive quantities.  Missing,
     non-numeric, non-finite, zero and negative values are rejected rather than
     silently receiving an advantageous normalized score.  ``P`` is a count and
     therefore must be an integer, though it remains a float-compatible field to
@@ -55,7 +52,9 @@ def validate_jobs(jobs: Iterable[JobFeatures]) -> List[JobFeatures]:
         if not isinstance(job, JobFeatures):
             raise RankValidationError(f"jobs[{index}] is not a JobFeatures instance")
         if not isinstance(job.job_id, str) or not job.job_id.strip():
-            raise RankValidationError(f"jobs[{index}].job_id must be a non-empty string")
+            raise RankValidationError(
+                f"jobs[{index}].job_id must be a non-empty string"
+            )
         if job.job_id in seen:
             raise RankValidationError(f"duplicate job_id: {job.job_id!r}")
         seen.add(job.job_id)
@@ -94,7 +93,7 @@ def _minmax_normalize(
 
 
 def compute_ranks(jobs: Iterable[JobFeatures]) -> Dict[str, float]:
-    """Compute the exact burst-relative weighted rank from Eq. (1) and (2)."""
+    """Compute the exact burst-relative weighted rank"""
 
     validated = validate_jobs(jobs)
     if not validated:
@@ -109,8 +108,7 @@ def compute_ranks(jobs: Iterable[JobFeatures]) -> Dict[str, float]:
 
     return {
         job.job_id: sum(
-            WEIGHTS[feature] * normalized[feature][job.job_id]
-            for feature in FEATURES
+            WEIGHTS[feature] * normalized[feature][job.job_id] for feature in FEATURES
         )
         for job in validated
     }

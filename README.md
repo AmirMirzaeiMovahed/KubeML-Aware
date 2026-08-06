@@ -1,8 +1,7 @@
 # KubeML-Aware
 
 KubeML-Aware is a reproducible implementation of the ML-aware Kubernetes
-scheduling experiment proposed in the accompanying paper, plus a separately
-reported resource-feedback adaptive pacing extension.
+scheduling
 
 The maintained implementation, setup instructions, experiment contracts, and
 validation reports live in

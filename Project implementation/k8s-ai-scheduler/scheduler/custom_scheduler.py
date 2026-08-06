@@ -1,8 +1,6 @@
 """Article-reproduction scheduler using explicit single-node Pod binding.
 
-This profile intentionally mirrors the paper's manual binding experiment and
-is constrained to a dedicated, validated single-node target.  Production
-workloads should use :mod:`scheduler.gate_controller`, which leaves feasibility,
+Production workloads should use :mod:`scheduler.gate_controller`, which leaves feasibility,
 scoring and binding to the normal kube-scheduler.
 """
 
@@ -30,7 +28,10 @@ from scheduler.burst import (  # noqa: E402
     run_settings_for_pods,
 )
 from scheduler.config import ConfigurationError, SchedulerConfig  # noqa: E402
-from scheduler.execution import ExecutionStartError, wait_for_execution_start  # noqa: E402
+from scheduler.execution import (
+    ExecutionStartError,
+    wait_for_execution_start,
+)  # noqa: E402
 from scheduler.kube import (  # noqa: E402
     ApiFailureKind,
     KubernetesOperationError,
@@ -132,7 +133,9 @@ class MLAwareScheduler:
         )
         self.metrics = default_metrics()
         self.health = HealthState()
-        self.health_server = HealthServer(health_host, health_port, self.health, self.metrics)
+        self.health_server = HealthServer(
+            health_host, health_port, self.health, self.metrics
+        )
         self.enable_health_server = enable_health_server
         self._stop = False
         self._processed_runs = set()
@@ -168,7 +171,9 @@ class MLAwareScheduler:
     def _pending_pods_for_me(self) -> List[Any]:
         return self._list_eligible_pods()
 
-    def _wait_for_execution_start(self, pod_name: str, timeout: Optional[float] = None) -> float:
+    def _wait_for_execution_start(
+        self, pod_name: str, timeout: Optional[float] = None
+    ) -> float:
         return wait_for_execution_start(
             self.v1,
             pod_name,
@@ -218,7 +223,9 @@ class MLAwareScheduler:
             watcher.stop()
 
     def _discover_settings(self, *, wait_forever: bool) -> RunSettings:
-        deadline = None if wait_forever else self.monotonic() + self.config.burst_timeout
+        deadline = (
+            None if wait_forever else self.monotonic() + self.config.burst_timeout
+        )
         while not self._stop and (deadline is None or self.monotonic() < deadline):
             pods = self._list_eligible_pods()
             groups = group_pods_by_run(pods)
@@ -321,7 +328,9 @@ class MLAwareScheduler:
                         f"pod {name!r} uses hostPort; manual binding cannot check conflicts"
                     )
         node_selector = getattr(spec, "node_selector", None) or {}
-        node_labels = getattr(getattr(self.node, "metadata", None), "labels", None) or {}
+        node_labels = (
+            getattr(getattr(self.node, "metadata", None), "labels", None) or {}
+        )
         mismatches = [
             key for key, value in node_selector.items() if node_labels.get(key) != value
         ]
@@ -333,7 +342,9 @@ class MLAwareScheduler:
         for taint in getattr(getattr(self.node, "spec", None), "taints", None) or []:
             if getattr(taint, "effect", None) not in {"NoSchedule", "NoExecute"}:
                 continue
-            if not any(self._tolerates(toleration, taint) for toleration in tolerations):
+            if not any(
+                self._tolerates(toleration, taint) for toleration in tolerations
+            ):
                 raise ManualBindingSafetyError(
                     f"pod {name!r} does not tolerate target-node taint "
                     f"{getattr(taint, 'key', '')}={getattr(taint, 'value', '')}:"
@@ -357,7 +368,9 @@ class MLAwareScheduler:
         )
 
     def _bind_pod(self, pod_name: str) -> None:
-        target = client.V1ObjectReference(kind="Node", api_version="v1", name=self.node_name)
+        target = client.V1ObjectReference(
+            kind="Node", api_version="v1", name=self.node_name
+        )
         metadata = client.V1ObjectMeta(name=pod_name, namespace=self.config.namespace)
         body = client.V1Binding(target=target, metadata=metadata)
         try:
@@ -409,19 +422,23 @@ class MLAwareScheduler:
         store: Optional[AtomicRecordStore] = None,
     ) -> Pacer:
         feedback = (
-            self._feedback_for_adaptive() if settings.pacing_mode == "adaptive" else None
+            self._feedback_for_adaptive()
+            if settings.pacing_mode == "adaptive"
+            else None
         )
         last_recorded_timestamp: List[Optional[float]] = [None]
 
         def record_sample(sample: MetricsSample, age: float) -> None:
             self._on_metrics_sample(sample, age)
             if store is not None and sample.observed_at != last_recorded_timestamp[0]:
-                store.append_event({
-                    "event": "adaptive_metrics_sample",
-                    "utilization": sample.utilization,
-                    "observed_at": sample.observed_at,
-                    "age_seconds": age,
-                })
+                store.append_event(
+                    {
+                        "event": "adaptive_metrics_sample",
+                        "utilization": sample.utilization,
+                        "observed_at": sample.observed_at,
+                        "age_seconds": age,
+                    }
+                )
                 last_recorded_timestamp[0] = sample.observed_at
 
         return Pacer(
@@ -451,12 +468,16 @@ class MLAwareScheduler:
 
     def _results_path(self, run_id: str, *, one_shot: bool) -> str:
         if "{run_id}" in self.config.results_path:
-            safe = "".join(char if char.isalnum() or char in "-_." else "_" for char in run_id)
+            safe = "".join(
+                char if char.isalnum() or char in "-_." else "_" for char in run_id
+            )
             return self.config.results_path.format(run_id=safe)
         if one_shot:
             return self.config.results_path
         root, extension = os.path.splitext(self.config.results_path)
-        safe = "".join(char if char.isalnum() or char in "-_." else "_" for char in run_id)
+        safe = "".join(
+            char if char.isalnum() or char in "-_." else "_" for char in run_id
+        )
         return f"{root}-{safe}{extension or '.json'}"
 
     def _record_metadata(self, settings: RunSettings) -> Dict[str, object]:
@@ -473,7 +494,9 @@ class MLAwareScheduler:
             **self.config.runtime_metadata(),
         }
 
-    def process_run(self, settings: RunSettings, *, one_shot: bool = False) -> List[ScheduleRecord]:
+    def process_run(
+        self, settings: RunSettings, *, one_shot: bool = False
+    ) -> List[ScheduleRecord]:
         self.metrics.inc("ml_scheduler_bursts_total")
         self.logger.info(
             "burst_collection_started",
@@ -481,13 +504,13 @@ class MLAwareScheduler:
             expected_count=settings.expected_count,
         )
         pods = self._collect(settings)
-        self.metrics.set("ml_scheduler_burst_jobs", len(pods), {"run_id": settings.run_id})
+        self.metrics.set(
+            "ml_scheduler_burst_jobs", len(pods), {"run_id": settings.run_id}
+        )
         pods_by_name = {pod.metadata.name: pod for pod in pods}
         jobs = [extract_features(pod) for pod in pods]
         ranks = compute_ranks(jobs)
-        tie_keys = {
-            pod.metadata.name: self._pod_order_key(pod) for pod in pods
-        }
+        tie_keys = {pod.metadata.name: self._pod_order_key(pod) for pod in pods}
         ordered = sort_by_rank(
             jobs,
             reverse_order=settings.reverse,
@@ -543,32 +566,38 @@ class MLAwareScheduler:
                     "ml_scheduler_releases_total", labels={"profile": "manual-bind"}
                 )
                 if index < len(records) - 1:
-                    store.append_event({
-                        "event": "pacing_wait_started",
-                        "after_job_id": job.job_id,
-                        "before_job_id": ordered[index + 1].job_id,
-                        "mode": settings.pacing_mode,
-                        "fixed_delay_seconds": settings.fixed_delay,
-                        "timestamp": self.wall_time(),
-                    })
+                    store.append_event(
+                        {
+                            "event": "pacing_wait_started",
+                            "after_job_id": job.job_id,
+                            "before_job_id": ordered[index + 1].job_id,
+                            "mode": settings.pacing_mode,
+                            "fixed_delay_seconds": settings.fixed_delay,
+                            "timestamp": self.wall_time(),
+                        }
+                    )
                     try:
                         pacer.wait()
                     except Exception as exc:
-                        store.append_event({
-                            "event": "pacing_wait_failed",
+                        store.append_event(
+                            {
+                                "event": "pacing_wait_failed",
+                                "after_job_id": job.job_id,
+                                "mode": settings.pacing_mode,
+                                "timestamp": self.wall_time(),
+                                "error": str(exc),
+                            }
+                        )
+                        raise
+                    store.append_event(
+                        {
+                            "event": "pacing_wait_completed",
                             "after_job_id": job.job_id,
+                            "before_job_id": ordered[index + 1].job_id,
                             "mode": settings.pacing_mode,
                             "timestamp": self.wall_time(),
-                            "error": str(exc),
-                        })
-                        raise
-                    store.append_event({
-                        "event": "pacing_wait_completed",
-                        "after_job_id": job.job_id,
-                        "before_job_id": ordered[index + 1].job_id,
-                        "mode": settings.pacing_mode,
-                        "timestamp": self.wall_time(),
-                    })
+                        }
+                    )
             store.set_status("completed")
             self.records.extend(records)
             self.logger.info(
@@ -580,7 +609,8 @@ class MLAwareScheduler:
             return records
         except Exception as exc:
             current = next(
-                (record for record in records if record.status in {"binding", "bound"}), None
+                (record for record in records if record.status in {"binding", "bound"}),
+                None,
             )
             if current is not None:
                 current.status = "failed"
@@ -666,7 +696,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-node", required=True)
     parser.add_argument("--run-id")
     parser.add_argument("--expected-count", type=int)
-    parser.add_argument("--pacing-mode", choices=["none", "fixed", "adaptive"], default="none")
+    parser.add_argument(
+        "--pacing-mode", choices=["none", "fixed", "adaptive"], default="none"
+    )
     parser.add_argument("--fixed-delay", type=float, default=0.0)
     parser.add_argument("--cpu-threshold", type=float, default=0.85)
     parser.add_argument("--adaptive-hysteresis", type=float, default=0.05)
@@ -734,7 +766,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         else:
             scheduler.run_forever()
         return 0
-    except (BurstContractError, ExecutionStartError, KubernetesOperationError, PacingError) as exc:
+    except (
+        BurstContractError,
+        ExecutionStartError,
+        KubernetesOperationError,
+        PacingError,
+    ) as exc:
         scheduler.logger.error("scheduler_terminated", error=str(exc))
         return 1
 
