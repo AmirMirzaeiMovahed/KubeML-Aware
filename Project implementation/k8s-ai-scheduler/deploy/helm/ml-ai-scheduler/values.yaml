@@ -35,6 +35,9 @@ scheduler:
   apiTimeoutSeconds: 10
   apiRetries: 4
   targetNode: ""
+  # Set only on a single-node cluster to pace against that node's CPU metrics.
+  # Empty keeps the safer cluster-wide production feedback.
+  metricsNode: ""
   reverse: false
   resultsPath: "/results/schedule-{run_id}.json"
   extraArgs: []
