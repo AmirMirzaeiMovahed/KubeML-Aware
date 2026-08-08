@@ -158,6 +158,16 @@ def wait_for_execution_start(
                 retries=api_retries,
                 log_read=True,
             )
+            # Handle HTTPResponse object from _preload_content=False
+            if hasattr(logs, "data"):
+                logs = logs.data
+            if isinstance(logs, bytes):
+                logs = logs.decode("utf-8", errors="replace")
+            elif isinstance(logs, str) and logs.startswith("b'") and logs.endswith("'"):
+                try:
+                    logs = logs[2:-1].encode().decode("unicode_escape")
+                except Exception:
+                    pass
             marker = parse_execution_marker(logs, expected_job_id=pod_name)
             if marker is not None:
                 return marker

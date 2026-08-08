@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-08-08T14:26:34.327462+00:00",
+  "created_at": "2026-08-08T15:16:01.440884+00:00",
   "error": null,
   "events": [
     {
@@ -8,16 +8,16 @@
       "event": "pacing_wait_started",
       "fixed_delay_seconds": 0.0,
       "mode": "none",
-      "recorded_at": "2026-08-08T14:26:38.560676+00:00",
-      "timestamp": 1786199198.5596743
+      "recorded_at": "2026-08-08T15:16:05.470999+00:00",
+      "timestamp": 1786202165.4709997
     },
     {
       "after_job_id": "workload-1",
       "before_job_id": "workload-3",
       "event": "pacing_wait_completed",
       "mode": "none",
-      "recorded_at": "2026-08-08T14:26:38.562668+00:00",
-      "timestamp": 1786199198.562668
+      "recorded_at": "2026-08-08T15:16:05.473222+00:00",
+      "timestamp": 1786202165.4732223
     },
     {
       "after_job_id": "workload-3",
@@ -25,16 +25,16 @@
       "event": "pacing_wait_started",
       "fixed_delay_seconds": 0.0,
       "mode": "none",
-      "recorded_at": "2026-08-08T14:26:42.007525+00:00",
-      "timestamp": 1786199202.0075254
+      "recorded_at": "2026-08-08T15:16:09.395106+00:00",
+      "timestamp": 1786202169.3951063
     },
     {
       "after_job_id": "workload-3",
       "before_job_id": "workload-2",
       "event": "pacing_wait_completed",
       "mode": "none",
-      "recorded_at": "2026-08-08T14:26:42.010868+00:00",
-      "timestamp": 1786199202.0108688
+      "recorded_at": "2026-08-08T15:16:09.398931+00:00",
+      "timestamp": 1786202169.3989317
     }
   ],
   "metadata": {
@@ -49,53 +49,54 @@
     "gate_name": "ml.scheduler/release",
     "max_wait_seconds": 30.0,
     "metrics_max_age_seconds": 30.0,
+    "metrics_node": "minikube",
+    "metrics_scope": "node",
     "namespace": "default",
     "pacing_mode": "none",
     "poll_interval_seconds": 0.5,
-    "profile": "single-node-scheduling-gate",
+    "profile": "production-scheduling-gate",
     "quiet_period_seconds": 1.5,
     "reverse": false,
     "run_id": "run-small",
     "runtime_contract_version": "1.0",
-    "scheduler_name": "default-scheduler",
-    "target_node": "minikube"
+    "scheduler_name": "default-scheduler"
   },
   "records": [
     {
       "bind_time": null,
       "error": null,
-      "exec_start_time": 1786199198.541787,
+      "exec_start_time": 1786202164.6052835,
       "job_id": "workload-1",
       "order": 1,
-      "pod_uid": "6e7850ee-c0e9-476c-af84-0793fc9f76d8",
+      "pod_uid": "365a9ded-8601-4206-a674-4eb8c2575830",
       "rank": 1.1249999999999998,
-      "release_time": 1786199194.343739,
+      "release_time": 1786202161.4592106,
       "status": "execution_started"
     },
     {
       "bind_time": null,
       "error": null,
-      "exec_start_time": 1786199199.6473134,
+      "exec_start_time": 1786202168.927558,
       "job_id": "workload-3",
       "order": 2,
-      "pod_uid": "cec77cf6-153f-4c91-b00d-110ae49ec326",
+      "pod_uid": "3ab6ddfb-9781-47fc-a906-f0584985803d",
       "rank": 0.8,
-      "release_time": 1786199198.56519,
+      "release_time": 1786202165.4758167,
       "status": "execution_started"
     },
     {
       "bind_time": null,
       "error": null,
-      "exec_start_time": 1786199202.7861414,
+      "exec_start_time": 1786202172.089502,
       "job_id": "workload-2",
       "order": 3,
-      "pod_uid": "74c12505-c9c2-4660-95c1-891b70d8a22e",
+      "pod_uid": "f84a9f73-137c-4bf5-bbd8-639eb6a28289",
       "rank": 0.125,
-      "release_time": 1786199202.0136583,
+      "release_time": 1786202169.4017293,
       "status": "execution_started"
     }
   ],
   "schema_version": 3,
   "status": "completed",
-  "updated_at": "2026-08-08T14:26:45.584843+00:00"
+  "updated_at": "2026-08-08T15:16:12.513416+00:00"
 }
