@@ -67,3 +67,6 @@ is `deploy/knative/france-ingress.yaml`.
 The Knative Service scales from zero to at most two replicas by default. Keep
 the scheduler controller as a normal Kubernetes Deployment; it is a long-lived
 reconciler, while Knative is used for the request-driven inference workload.
+
+The measured France deployment, image digests, autoscaling result, and live
+scheduling-gate output are recorded in `FRANCE_DEPLOYMENT_EVIDENCE.md`.
