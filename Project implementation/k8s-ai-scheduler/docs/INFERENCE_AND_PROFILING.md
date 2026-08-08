@@ -57,6 +57,10 @@ negative measurements fail closed.
 
 Build `inference/Dockerfile`, load or push the immutable image, then apply
 `deploy/knative/namespace.yaml` and `deploy/knative/inference-service.yaml`.
+For the documented air-gapped/local-image manifest, import the image as
+`registry.local/kubeml/ml-inference-service:0.2.0` and add `registry.local` to
+Knative's `registries-skipping-tag-resolving`; production registries should use
+an immutable digest instead.
 The Knative Service scales from zero to at most two replicas by default. Keep
 the scheduler controller as a normal Kubernetes Deployment; it is a long-lived
 reconciler, while Knative is used for the request-driven inference workload.

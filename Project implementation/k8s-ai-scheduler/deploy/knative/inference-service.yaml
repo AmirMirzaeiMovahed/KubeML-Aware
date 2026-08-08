@@ -23,7 +23,7 @@ spec:
       containers:
         - name: inference
           # Deployment automation replaces this immutable local tag or digest.
-          image: ml-inference-service:0.2.0
+          image: registry.local/kubeml/ml-inference-service:0.2.0
           imagePullPolicy: IfNotPresent
           env:
             - name: MODEL_INPUT_DIM
