@@ -58,7 +58,7 @@ from scheduler.pacing import (  # noqa: E402
     PacingInterrupted,
     RealClusterFeedback,
 )
-from scheduler.rank import compute_ranks, sort_by_rank  # noqa: E402
+from scheduler.rank import compute_workload_ranks, sort_workloads_by_rank  # noqa: E402
 from scheduler.records import (  # noqa: E402
     AtomicRecordStore,
     RecordStoreError,
@@ -510,9 +510,9 @@ class SchedulingGateController:
         self.metrics.set("ml_scheduler_burst_jobs", len(pods), {"run_id": settings.run_id})
         pods_by_name = {pod.metadata.name: pod for pod in pods}
         jobs = [extract_features(pod) for pod in pods]
-        ranks = compute_ranks(jobs)
+        ranks = compute_workload_ranks(jobs)
         tie_keys = {pod.metadata.name: self._pod_order_key(pod) for pod in pods}
-        ordered = sort_by_rank(
+        ordered = sort_workloads_by_rank(
             jobs,
             reverse_order=settings.reverse,
             tie_breaker=lambda job: tie_keys[job.job_id],

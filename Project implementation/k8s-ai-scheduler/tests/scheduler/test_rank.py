@@ -3,10 +3,14 @@ import math
 import pytest
 
 from scheduler.rank import (
+    InferenceFeatures,
     JobFeatures,
     RankValidationError,
+    compute_inference_ranks,
     compute_ranks,
+    compute_workload_ranks,
     sort_by_rank,
+    sort_workloads_by_rank,
 )
 
 
@@ -59,4 +63,52 @@ def test_invalid_rank_inputs_are_rejected(jobs, message):
 def test_empty_burst_is_valid_and_empty():
     assert compute_ranks([]) == {}
     assert sort_by_rank([]) == []
+
+
+def inference(job_id, **overrides):
+    values = dict(
+        latency_slo_ms=100.0,
+        predicted_latency_ms=50.0,
+        request_rate_rps=10.0,
+        memory_mib=256.0,
+        cold_start_ms=100.0,
+        priority=1.0,
+    )
+    values.update(overrides)
+    return InferenceFeatures(job_id=job_id, **values)
+
+
+def test_inference_policy_prioritizes_slo_pressure_and_demand():
+    urgent = inference(
+        "urgent",
+        latency_slo_ms=50,
+        predicted_latency_ms=45,
+        request_rate_rps=100,
+        cold_start_ms=500,
+        priority=10,
+    )
+    background = inference(
+        "background",
+        latency_slo_ms=500,
+        predicted_latency_ms=50,
+        request_rate_rps=1,
+        cold_start_ms=10,
+        priority=1,
+    )
+    ranks = compute_inference_ranks([background, urgent])
+    assert ranks["urgent"] > ranks["background"]
+    assert [item.job_id for item in sort_workloads_by_rank([background, urgent])] == [
+        "urgent",
+        "background",
+    ]
+
+
+def test_workload_policy_rejects_mixed_training_and_inference_burst():
+    with pytest.raises(RankValidationError, match="must not mix"):
+        compute_workload_ranks([job("train"), inference("serve")])
+
+
+def test_invalid_inference_features_are_rejected():
+    with pytest.raises(RankValidationError, match="finite and > 0"):
+        compute_inference_ranks([inference("bad", latency_slo_ms=0)])
 

@@ -11,12 +11,21 @@ from .constants import (
     EXPECTED_COUNT_ANNOTATION,
     EXPECTED_JOBS_ANNOTATION,
     FIXED_DELAY_ANNOTATION,
+    INFERENCE_ANNOTATION_MAP,
     PACING_MODE_ANNOTATION,
     REVERSE_ANNOTATION,
     RUN_ID_ANNOTATION,
     RUN_ID_LABEL,
+    WORKLOAD_KIND_ANNOTATION,
 )
-from .rank import JobFeatures, RankValidationError, validate_jobs
+from .rank import (
+    InferenceFeatures,
+    JobFeatures,
+    RankValidationError,
+    WorkloadFeatures,
+    validate_inference_jobs,
+    validate_jobs,
+)
 
 
 class AnnotationValidationError(ValueError):
@@ -54,12 +63,36 @@ def pod_run_id(pod: Any) -> Optional[str]:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def extract_features(pod: Any) -> JobFeatures:
+def extract_features(pod: Any) -> WorkloadFeatures:
     metadata = getattr(pod, "metadata", None)
     name = getattr(metadata, "name", None)
     if not isinstance(name, str) or not name:
         raise AnnotationValidationError("pod metadata.name is missing")
     annotations = _metadata_map(pod, "annotations")
+    workload_kind = str(annotations.get(WORKLOAD_KIND_ANNOTATION, "training")).strip().lower()
+    if workload_kind == "inference":
+        values: Dict[str, float] = {}
+        for feature, key in INFERENCE_ANNOTATION_MAP.items():
+            if key not in annotations:
+                raise AnnotationValidationError(
+                    f"inference pod {name!r} is missing required annotation {key!r}"
+                )
+            try:
+                values[feature] = float(annotations[key])
+            except (TypeError, ValueError) as exc:
+                raise AnnotationValidationError(
+                    f"inference pod {name!r} annotation {key!r} is not numeric"
+                ) from exc
+        job = InferenceFeatures(job_id=name, **values)
+        try:
+            validate_inference_jobs([job])
+        except RankValidationError as exc:
+            raise AnnotationValidationError(str(exc)) from exc
+        return job
+    if workload_kind != "training":
+        raise AnnotationValidationError(
+            f"pod {name!r} has unsupported workload kind {workload_kind!r}"
+        )
     values: Dict[str, float] = {}
     for feature, key in ANNOTATION_MAP.items():
         if key not in annotations:
