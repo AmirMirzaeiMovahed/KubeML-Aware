@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-08-08T15:16:01.440884+00:00",
+  "created_at": "2026-08-08T16:18:13.869948+00:00",
   "error": null,
   "events": [
     {
@@ -8,16 +8,16 @@
       "event": "pacing_wait_started",
       "fixed_delay_seconds": 0.0,
       "mode": "none",
-      "recorded_at": "2026-08-08T15:16:05.470999+00:00",
-      "timestamp": 1786202165.4709997
+      "recorded_at": "2026-08-08T16:18:20.273914+00:00",
+      "timestamp": 1786205900.2739143
     },
     {
       "after_job_id": "workload-1",
       "before_job_id": "workload-3",
       "event": "pacing_wait_completed",
       "mode": "none",
-      "recorded_at": "2026-08-08T15:16:05.473222+00:00",
-      "timestamp": 1786202165.4732223
+      "recorded_at": "2026-08-08T16:18:20.276750+00:00",
+      "timestamp": 1786205900.2767503
     },
     {
       "after_job_id": "workload-3",
@@ -25,16 +25,16 @@
       "event": "pacing_wait_started",
       "fixed_delay_seconds": 0.0,
       "mode": "none",
-      "recorded_at": "2026-08-08T15:16:09.395106+00:00",
-      "timestamp": 1786202169.3951063
+      "recorded_at": "2026-08-08T16:18:25.281307+00:00",
+      "timestamp": 1786205905.281308
     },
     {
       "after_job_id": "workload-3",
       "before_job_id": "workload-2",
       "event": "pacing_wait_completed",
       "mode": "none",
-      "recorded_at": "2026-08-08T15:16:09.398931+00:00",
-      "timestamp": 1786202169.3989317
+      "recorded_at": "2026-08-08T16:18:25.284216+00:00",
+      "timestamp": 1786205905.284217
     }
   ],
   "metadata": {
@@ -65,38 +65,38 @@
     {
       "bind_time": null,
       "error": null,
-      "exec_start_time": 1786202164.6052835,
+      "exec_start_time": 1786205896.9942536,
       "job_id": "workload-1",
       "order": 1,
-      "pod_uid": "365a9ded-8601-4206-a674-4eb8c2575830",
+      "pod_uid": "bea442b7-4298-40a3-ab31-668f4c400747",
       "rank": 1.1249999999999998,
-      "release_time": 1786202161.4592106,
-      "status": "execution_started"
+      "release_time": 1786205893.8855748,
+      "status": "completed"
     },
     {
       "bind_time": null,
       "error": null,
-      "exec_start_time": 1786202168.927558,
+      "exec_start_time": 1786205902.6113312,
       "job_id": "workload-3",
       "order": 2,
-      "pod_uid": "3ab6ddfb-9781-47fc-a906-f0584985803d",
+      "pod_uid": "6f097e8e-7708-435e-bc72-aba6d23d3fa3",
       "rank": 0.8,
-      "release_time": 1786202165.4758167,
-      "status": "execution_started"
+      "release_time": 1786205900.280133,
+      "status": "completed"
     },
     {
       "bind_time": null,
       "error": null,
-      "exec_start_time": 1786202172.089502,
+      "exec_start_time": 1786205907.7987728,
       "job_id": "workload-2",
       "order": 3,
-      "pod_uid": "f84a9f73-137c-4bf5-bbd8-639eb6a28289",
+      "pod_uid": "879d7546-cd4f-4e02-9326-d608314639fd",
       "rank": 0.125,
-      "release_time": 1786202169.4017293,
-      "status": "execution_started"
+      "release_time": 1786205905.287074,
+      "status": "completed"
     }
   ],
   "schema_version": 3,
   "status": "completed",
-  "updated_at": "2026-08-08T15:16:12.513416+00:00"
+  "updated_at": "2026-08-08T16:18:30.444468+00:00"
 }
