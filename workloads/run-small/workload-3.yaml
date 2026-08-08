@@ -14,11 +14,27 @@ metadata:
     ml.scheduler/model-partitions: "1"
 spec:
   schedulerName: default-scheduler
+  restartPolicy: Never
   schedulingGates:
   - name: ml.scheduler/release
   containers:
   - name: train
-    image: nginx
+    image: ml-sim-job:local
+    env:
+    - name: JOB_ID
+      value: "workload-3"
+    - name: JOB_T
+      value: "90"
+    - name: JOB_R
+      value: "0.4"
+    - name: JOB_M
+      value: "256"
+    - name: JOB_G
+      value: "64"
+    - name: JOB_C
+      value: "15"
+    - name: JOB_P
+      value: "1"
     resources:
       requests:
         memory: "128Mi"

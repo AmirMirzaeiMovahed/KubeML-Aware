@@ -9,7 +9,12 @@ import time
 from typing import Any, Callable, Optional
 
 from .constants import EXECUTION_CONTAINER_ANNOTATION, EXECUTION_EVENT
-from .kube import ApiFailureKind, KubernetesOperationError, api_timeout, call_with_retries
+from .kube import (
+    ApiFailureKind,
+    KubernetesOperationError,
+    api_timeout,
+    call_with_retries,
+)
 
 
 class ExecutionStartError(RuntimeError):
@@ -48,7 +53,9 @@ def execution_container_for_pod(pod: Any) -> str:
     )
 
 
-def parse_execution_marker(log_text: str, *, expected_job_id: Optional[str] = None) -> Optional[float]:
+def parse_execution_marker(
+    log_text: str, *, expected_job_id: Optional[str] = None
+) -> Optional[float]:
     """Accept the versioned JSON marker and the original ``[epoch]`` marker."""
 
     for line in (log_text or "").splitlines():
@@ -60,11 +67,16 @@ def parse_execution_marker(log_text: str, *, expected_job_id: Optional[str] = No
                 payload = json.loads(stripped)
             except (TypeError, ValueError):
                 payload = None
-            if isinstance(payload, dict) and str(payload.get("event", "")).upper() == EXECUTION_EVENT:
+            if (
+                isinstance(payload, dict)
+                and str(payload.get("event", "")).upper() == EXECUTION_EVENT
+            ):
                 marker_job_id = payload.get("job_id")
                 if expected_job_id and marker_job_id not in (None, expected_job_id):
                     continue
-                value = payload.get("timestamp", payload.get("ts", payload.get("epoch")))
+                value = payload.get(
+                    "timestamp", payload.get("ts", payload.get("epoch"))
+                )
                 try:
                     timestamp = float(value)
                 except (TypeError, ValueError):
@@ -89,11 +101,15 @@ def _pod_terminal_failure(pod: Any) -> Optional[str]:
     for status in statuses:
         terminated = getattr(getattr(status, "state", None), "terminated", None)
         if terminated is not None:
-            return (
-                f"container {getattr(status, 'name', 'unknown')} terminated before marker "
-                f"(exit_code={getattr(terminated, 'exit_code', 'unknown')}, "
-                f"reason={getattr(terminated, 'reason', 'unknown')})"
-            )
+            exit_code = getattr(terminated, "exit_code", None)
+            reason = getattr(terminated, "reason", None)
+            # Only treat as failure if container terminated with error (non-zero exit code
+            # or non-Completed reason). Completed with exit_code=0 is success.
+            if exit_code != 0 or (reason is not None and reason != "Completed"):
+                return (
+                    f"container {getattr(status, 'name', 'unknown')} terminated before marker "
+                    f"(exit_code={exit_code}, reason={reason})"
+                )
     return None
 
 
@@ -129,6 +145,16 @@ def wait_for_execution_start(
                 retries=api_retries,
                 log_read=True,
             )
+            # Handle K8s Python client returning str containing repr(bytes)
+            # (literal b'...' with \\n) instead of decoded string
+            if isinstance(logs, bytes):
+                logs = logs.decode("utf-8", errors="replace")
+            elif isinstance(logs, str) and logs.startswith("b'") and logs.endswith("'"):
+                try:
+                    # Strip b'...' wrapper and decode escaped sequences
+                    logs = logs[2:-1].encode().decode("unicode_escape")
+                except Exception:
+                    pass  # fallback to original string
             marker = parse_execution_marker(logs, expected_job_id=pod_name)
             if marker is not None:
                 return marker
@@ -155,6 +181,52 @@ def wait_for_execution_start(
             failure = _pod_terminal_failure(pod)
             if failure:
                 raise ExecutionStartError(failure)
+
+            # Check if pod has already completed successfully (Succeeded phase)
+            phase = getattr(getattr(pod, "status", None), "phase", None)
+            if phase == "Succeeded":
+                # Pod completed - read logs one more time to find marker
+                try:
+                    logs = call_with_retries(
+                        lambda: core_api.read_namespaced_pod_log(
+                            pod_name,
+                            namespace,
+                            container=container,
+                            timestamps=False,
+                            _request_timeout=api_timeout(api_timeout_seconds),
+                        ),
+                        operation=f"read execution log for completed pod {pod_name}",
+                        retries=api_retries,
+                        log_read=True,
+                    )
+                    # Handle K8s Python client returning str containing repr(bytes)
+                    # (literal b'...' with \\n) instead of decoded string
+                    if isinstance(logs, bytes):
+                        logs = logs.decode("utf-8", errors="replace")
+                    elif (
+                        isinstance(logs, str)
+                        and logs.startswith("b'")
+                        and logs.endswith("'")
+                    ):
+                        try:
+                            # Strip b'...' wrapper and decode escaped sequences
+                            logs = logs[2:-1].encode().decode("unicode_escape")
+                        except Exception:
+                            pass  # fallback to original string
+                    marker = parse_execution_marker(logs, expected_job_id=pod_name)
+                    if marker is not None:
+                        return marker
+                    last_observation = (
+                        "completed pod logs did not contain a valid marker"
+                    )
+                except KubernetesOperationError as exc:
+                    if exc.kind not in {
+                        ApiFailureKind.TRANSIENT,
+                        ApiFailureKind.NOT_FOUND,
+                        ApiFailureKind.INVALID,
+                    }:
+                        raise ExecutionStartError(str(exc)) from exc
+                    last_observation = str(exc)
         except KubernetesOperationError as exc:
             if exc.kind not in {ApiFailureKind.TRANSIENT, ApiFailureKind.NOT_FOUND}:
                 raise ExecutionStartError(str(exc)) from exc

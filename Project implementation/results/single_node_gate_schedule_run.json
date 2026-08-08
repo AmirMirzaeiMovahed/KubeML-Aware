@@ -1,0 +1,101 @@
+{
+  "created_at": "2026-08-08T14:26:34.327462+00:00",
+  "error": null,
+  "events": [
+    {
+      "after_job_id": "workload-1",
+      "before_job_id": "workload-3",
+      "event": "pacing_wait_started",
+      "fixed_delay_seconds": 0.0,
+      "mode": "none",
+      "recorded_at": "2026-08-08T14:26:38.560676+00:00",
+      "timestamp": 1786199198.5596743
+    },
+    {
+      "after_job_id": "workload-1",
+      "before_job_id": "workload-3",
+      "event": "pacing_wait_completed",
+      "mode": "none",
+      "recorded_at": "2026-08-08T14:26:38.562668+00:00",
+      "timestamp": 1786199198.562668
+    },
+    {
+      "after_job_id": "workload-3",
+      "before_job_id": "workload-2",
+      "event": "pacing_wait_started",
+      "fixed_delay_seconds": 0.0,
+      "mode": "none",
+      "recorded_at": "2026-08-08T14:26:42.007525+00:00",
+      "timestamp": 1786199202.0075254
+    },
+    {
+      "after_job_id": "workload-3",
+      "before_job_id": "workload-2",
+      "event": "pacing_wait_completed",
+      "mode": "none",
+      "recorded_at": "2026-08-08T14:26:42.010868+00:00",
+      "timestamp": 1786199202.0108688
+    }
+  ],
+  "metadata": {
+    "adaptive_hysteresis": 0.05,
+    "api_retries": 4,
+    "api_timeout_seconds": 10.0,
+    "burst_timeout_seconds": 120.0,
+    "cpu_threshold": 0.85,
+    "execution_timeout_seconds": 120.0,
+    "expected_count": 3,
+    "fixed_delay": 0.0,
+    "gate_name": "ml.scheduler/release",
+    "max_wait_seconds": 30.0,
+    "metrics_max_age_seconds": 30.0,
+    "namespace": "default",
+    "pacing_mode": "none",
+    "poll_interval_seconds": 0.5,
+    "profile": "single-node-scheduling-gate",
+    "quiet_period_seconds": 1.5,
+    "reverse": false,
+    "run_id": "run-small",
+    "runtime_contract_version": "1.0",
+    "scheduler_name": "default-scheduler",
+    "target_node": "minikube"
+  },
+  "records": [
+    {
+      "bind_time": null,
+      "error": null,
+      "exec_start_time": 1786199198.541787,
+      "job_id": "workload-1",
+      "order": 1,
+      "pod_uid": "6e7850ee-c0e9-476c-af84-0793fc9f76d8",
+      "rank": 1.1249999999999998,
+      "release_time": 1786199194.343739,
+      "status": "execution_started"
+    },
+    {
+      "bind_time": null,
+      "error": null,
+      "exec_start_time": 1786199199.6473134,
+      "job_id": "workload-3",
+      "order": 2,
+      "pod_uid": "cec77cf6-153f-4c91-b00d-110ae49ec326",
+      "rank": 0.8,
+      "release_time": 1786199198.56519,
+      "status": "execution_started"
+    },
+    {
+      "bind_time": null,
+      "error": null,
+      "exec_start_time": 1786199202.7861414,
+      "job_id": "workload-2",
+      "order": 3,
+      "pod_uid": "74c12505-c9c2-4660-95c1-891b70d8a22e",
+      "rank": 0.125,
+      "release_time": 1786199202.0136583,
+      "status": "execution_started"
+    }
+  ],
+  "schema_version": 3,
+  "status": "completed",
+  "updated_at": "2026-08-08T14:26:45.584843+00:00"
+}
