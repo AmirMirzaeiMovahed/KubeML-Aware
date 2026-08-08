@@ -1,0 +1,62 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: kubeml-inference
+  namespace: kubeml-inference
+  labels:
+    app.kubernetes.io/name: kubeml-inference
+    app.kubernetes.io/part-of: kubeml-aware
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/class: kpa.autoscaling.knative.dev
+        autoscaling.knative.dev/metric: concurrency
+        autoscaling.knative.dev/target: "8"
+        autoscaling.knative.dev/min-scale: "0"
+        autoscaling.knative.dev/max-scale: "2"
+        autoscaling.knative.dev/window: 60s
+    spec:
+      containerConcurrency: 10
+      timeoutSeconds: 30
+      responseStartTimeoutSeconds: 10
+      containers:
+        - name: inference
+          # Deployment automation replaces this immutable local tag or digest.
+          image: registry.local/kubeml/ml-inference-service:0.2.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MODEL_INPUT_DIM
+              value: "4"
+            - name: MODEL_OUTPUT_DIM
+              value: "2"
+            - name: MODEL_SEED
+              value: "2025"
+          ports:
+            - name: http1
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault

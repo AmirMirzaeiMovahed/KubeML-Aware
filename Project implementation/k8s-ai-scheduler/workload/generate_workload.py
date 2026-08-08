@@ -691,7 +691,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", default="./workload_out")
     parser.add_argument("--scheduler-name", default="ml-aware-scheduler")
-    parser.add_argument("--image", default="ml-sim-job:0.1.0")
+    parser.add_argument("--image", default="ml-sim-job:0.2.1")
     parser.add_argument("--namespace", default="default")
     parser.add_argument("--run-id", default="manual-run")
     parser.add_argument("--scenario", default=None)

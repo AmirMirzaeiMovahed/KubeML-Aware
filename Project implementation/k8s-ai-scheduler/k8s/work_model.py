@@ -1,7 +1,8 @@
 """Versioned synthetic-training model shared by generation and execution.
 
-These constants are therefore explicit reproduction assumptions, not attributed to
-the authors.  Keeping the estimator and trainer budget in one dependency-free
+The article specifies feature meaning but not its original constants. These
+constants are therefore explicit reproduction assumptions, not attributed to
+the authors. Keeping the estimator and trainer budget in one dependency-free
 module prevents generator/trainer/simulator drift.
 """
 

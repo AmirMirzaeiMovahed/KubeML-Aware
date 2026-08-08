@@ -16,6 +16,7 @@ from scheduler.constants import (
 )
 from scheduler.custom_scheduler import ManualBindingSafetyError, MLAwareScheduler
 from scheduler.gate_controller import ControllerStopping, SchedulingGateController
+from scheduler.pacing import ClusterMetricsFeedback, RealClusterFeedback
 
 
 def node():
@@ -233,6 +234,45 @@ def test_gate_removal_uses_guarded_json_patch_and_is_idempotent(tmp_path):
     assert core.patches[0][3]["_content_type"] == "application/json-patch+json"
     controller._remove_gate("job-a")
     assert len(core.patches) == 1
+
+
+def test_gate_feedback_scope_supports_single_node_without_duplicate_controller(tmp_path):
+    class SingleNodeCore(GateCore):
+        def read_node(self, *_args, **_kwargs):
+            return node()
+
+    config = SchedulerConfig(
+        scheduler_name="default-scheduler",
+        namespace="test",
+        pacing_mode="adaptive",
+        quiet_period=0.1,
+        burst_timeout=2,
+        poll_interval=0.1,
+        api_timeout=1,
+        api_retries=0,
+        results_path=str(tmp_path / "gate.json"),
+    )
+    single = SchedulingGateController(
+        config,
+        metrics_node="node-a",
+        core_api=SingleNodeCore(),
+        custom_api=SimpleNamespace(),
+        load_config=False,
+        enable_health_server=False,
+    )
+    single._pacer(RunSettings("run-1", 2, "adaptive", 0, False))
+    assert isinstance(single.feedback, RealClusterFeedback)
+    assert single.feedback.node_name == "node-a"
+
+    cluster = SchedulingGateController(
+        config,
+        core_api=GateCore(),
+        custom_api=SimpleNamespace(),
+        load_config=False,
+        enable_health_server=False,
+    )
+    cluster._pacer(RunSettings("run-1", 2, "adaptive", 0, False))
+    assert isinstance(cluster.feedback, ClusterMetricsFeedback)
 
 
 def test_gate_process_keeps_normal_scheduler_and_records_release(tmp_path):

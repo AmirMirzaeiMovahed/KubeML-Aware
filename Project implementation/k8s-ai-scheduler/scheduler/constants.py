@@ -9,6 +9,16 @@ ANNOTATION_MAP = {
     "P": "ml.scheduler/model-partitions",
 }
 
+WORKLOAD_KIND_ANNOTATION = "ml.scheduler/workload-kind"
+INFERENCE_ANNOTATION_MAP = {
+    "latency_slo_ms": "ml.scheduler/latency-slo-ms",
+    "predicted_latency_ms": "ml.scheduler/predicted-latency-ms",
+    "request_rate_rps": "ml.scheduler/request-rate-rps",
+    "memory_mib": "ml.scheduler/memory-mib",
+    "cold_start_ms": "ml.scheduler/cold-start-ms",
+    "priority": "ml.scheduler/priority",
+}
+
 RUN_ID_LABEL = "ml.scheduler/run-id"
 RUN_ID_ANNOTATION = "ml.scheduler/run-id"
 SCENARIO_LABEL = "ml.scheduler/scenario"

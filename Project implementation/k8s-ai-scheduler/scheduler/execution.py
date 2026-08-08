@@ -91,6 +91,22 @@ def parse_execution_marker(
     return None
 
 
+def _raw_log_text(response: Any) -> str:
+    """Return exact log bytes without the Kubernetes client's JSON coercion."""
+
+    value = getattr(response, "data", response)
+    if isinstance(value, bytes):
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ExecutionStartError("execution log is not valid UTF-8") from exc
+    if isinstance(value, str):
+        return value
+    raise ExecutionStartError(
+        f"execution log API returned unsupported payload type {type(value).__name__}"
+    )
+
+
 def _pod_terminal_failure(pod: Any) -> Optional[str]:
     phase = getattr(getattr(pod, "status", None), "phase", None)
     if phase == "Failed":
@@ -101,15 +117,11 @@ def _pod_terminal_failure(pod: Any) -> Optional[str]:
     for status in statuses:
         terminated = getattr(getattr(status, "state", None), "terminated", None)
         if terminated is not None:
-            exit_code = getattr(terminated, "exit_code", None)
-            reason = getattr(terminated, "reason", None)
-            # Only treat as failure if container terminated with error (non-zero exit code
-            # or non-Completed reason). Completed with exit_code=0 is success.
-            if exit_code != 0 or (reason is not None and reason != "Completed"):
-                return (
-                    f"container {getattr(status, 'name', 'unknown')} terminated before marker "
-                    f"(exit_code={exit_code}, reason={reason})"
-                )
+            return (
+                f"container {getattr(status, 'name', 'unknown')} terminated before marker "
+                f"(exit_code={getattr(terminated, 'exit_code', 'unknown')}, "
+                f"reason={getattr(terminated, 'reason', 'unknown')})"
+            )
     return None
 
 
@@ -139,22 +151,13 @@ def wait_for_execution_start(
                     namespace,
                     container=container,
                     timestamps=False,
+                    _preload_content=False,
                     _request_timeout=api_timeout(api_timeout_seconds),
                 ),
                 operation=f"read execution log for {pod_name}",
                 retries=api_retries,
                 log_read=True,
             )
-            # Handle K8s Python client returning str containing repr(bytes)
-            # (literal b'...' with \\n) instead of decoded string
-            if isinstance(logs, bytes):
-                logs = logs.decode("utf-8", errors="replace")
-            elif isinstance(logs, str) and logs.startswith("b'") and logs.endswith("'"):
-                try:
-                    # Strip b'...' wrapper and decode escaped sequences
-                    logs = logs[2:-1].encode().decode("unicode_escape")
-                except Exception:
-                    pass  # fallback to original string
             marker = parse_execution_marker(logs, expected_job_id=pod_name)
             if marker is not None:
                 return marker

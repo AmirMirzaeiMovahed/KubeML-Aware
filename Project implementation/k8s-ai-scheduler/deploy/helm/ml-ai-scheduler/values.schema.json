@@ -56,6 +56,7 @@
         "apiTimeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
         "apiRetries": {"type": "integer", "minimum": 0},
         "targetNode": {"type": "string"},
+        "metricsNode": {"type": "string"},
         "reverse": {"type": "boolean"},
         "resultsPath": {"type": "string", "minLength": 1}
       }

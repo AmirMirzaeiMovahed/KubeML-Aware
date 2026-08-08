@@ -8,7 +8,7 @@ image build, registry push, server-side dry run, or live deployment.
 
 ## Release candidate
 
-- Project version: `0.1.0`
+- Project version: `0.2.1`
 - Local Python: `3.11.9`
 - Helm used for validation: `v4.2.0`
 - Offline Kubernetes schema target: `1.36.0`

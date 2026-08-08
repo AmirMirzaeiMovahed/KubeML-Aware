@@ -48,6 +48,7 @@ from scheduler.kube import (  # noqa: E402
     api_timeout,
     call_with_retries,
     load_kubernetes_configuration,
+    validate_target_node,
 )
 from scheduler.pacing import (  # noqa: E402
     ClusterMetricsFeedback,
@@ -55,8 +56,9 @@ from scheduler.pacing import (  # noqa: E402
     Pacer,
     PacingError,
     PacingInterrupted,
+    RealClusterFeedback,
 )
-from scheduler.rank import compute_ranks, sort_by_rank  # noqa: E402
+from scheduler.rank import compute_workload_ranks, sort_workloads_by_rank  # noqa: E402
 from scheduler.records import (  # noqa: E402
     AtomicRecordStore,
     RecordStoreError,
@@ -84,6 +86,7 @@ class SchedulingGateController:
         config: SchedulerConfig,
         *,
         gate_name: str = RELEASE_GATE,
+        metrics_node: Optional[str] = None,
         core_api: Any = None,
         custom_api: Any = None,
         load_config: bool = True,
@@ -97,6 +100,7 @@ class SchedulingGateController:
         if not gate_name:
             raise ConfigurationError("gate_name must not be empty")
         self.gate_name = gate_name
+        self.metrics_node = metrics_node.strip() if metrics_node else None
         self.monotonic = monotonic
         self.wall_time = wall_time
         self.sleep = sleep
@@ -113,7 +117,7 @@ class SchedulingGateController:
         self._processed_runs = set()
         self._failed_runs = set()
         self.records: List[ScheduleRecord] = []
-        self.feedback: Optional[ClusterMetricsFeedback] = None
+        self.feedback: Optional[Any] = None
 
         if core_api is None:
             if load_config:
@@ -123,6 +127,14 @@ class SchedulingGateController:
         else:
             self.v1 = core_api
         self.custom_api = custom_api or client.CustomObjectsApi()
+
+        if self.metrics_node:
+            validate_target_node(
+                self.v1,
+                self.metrics_node,
+                timeout=self.config.api_timeout,
+                retries=self.config.api_retries,
+            )
 
         # A successful narrow list proves credentials and RBAC before readiness.
         call_with_retries(
@@ -216,6 +228,8 @@ class SchedulingGateController:
             "expected_count": settings.expected_count,
             "scheduler_name": self.config.scheduler_name,
             "namespace": self.config.namespace,
+            "metrics_scope": "node" if self.metrics_node else "cluster",
+            "metrics_node": self.metrics_node,
             "pacing_mode": settings.pacing_mode,
             "fixed_delay": settings.fixed_delay,
             "reverse": settings.reverse,
@@ -437,12 +451,21 @@ class SchedulingGateController:
         store: Optional[AtomicRecordStore] = None,
     ) -> Pacer:
         if settings.pacing_mode == "adaptive" and self.feedback is None:
-            self.feedback = ClusterMetricsFeedback(
-                self.v1,
-                self.custom_api,
-                api_timeout_seconds=self.config.api_timeout,
-                api_retries=self.config.api_retries,
-            )
+            if self.metrics_node:
+                self.feedback = RealClusterFeedback(
+                    self.v1,
+                    self.custom_api,
+                    self.metrics_node,
+                    api_timeout_seconds=self.config.api_timeout,
+                    api_retries=self.config.api_retries,
+                )
+            else:
+                self.feedback = ClusterMetricsFeedback(
+                    self.v1,
+                    self.custom_api,
+                    api_timeout_seconds=self.config.api_timeout,
+                    api_retries=self.config.api_retries,
+                )
         last_recorded_timestamp: List[Optional[float]] = [None]
 
         def record_sample(sample: MetricsSample, age: float) -> None:
@@ -487,9 +510,9 @@ class SchedulingGateController:
         self.metrics.set("ml_scheduler_burst_jobs", len(pods), {"run_id": settings.run_id})
         pods_by_name = {pod.metadata.name: pod for pod in pods}
         jobs = [extract_features(pod) for pod in pods]
-        ranks = compute_ranks(jobs)
+        ranks = compute_workload_ranks(jobs)
         tie_keys = {pod.metadata.name: self._pod_order_key(pod) for pod in pods}
-        ordered = sort_by_rank(
+        ordered = sort_workloads_by_rank(
             jobs,
             reverse_order=settings.reverse,
             tie_breaker=lambda job: tie_keys[job.job_id],
@@ -791,6 +814,10 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheduler-name", default="default-scheduler")
     parser.add_argument("--namespace", default="default")
     parser.add_argument("--gate-name", default=RELEASE_GATE)
+    parser.add_argument(
+        "--metrics-node",
+        help="use one validated node for adaptive feedback (single-node clusters)",
+    )
     parser.add_argument("--run-id")
     parser.add_argument("--expected-count", type=int)
     parser.add_argument("--pacing-mode", choices=["none", "fixed", "adaptive"], default="none")
@@ -839,7 +866,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             health_host=args.health_host,
             health_port=args.health_port,
         )
-        controller = SchedulingGateController(config, gate_name=args.gate_name)
+        controller = SchedulingGateController(
+            config,
+            gate_name=args.gate_name,
+            metrics_node=args.metrics_node,
+        )
     except ConfigurationError as exc:
         parser.error(str(exc))
     signal.signal(signal.SIGTERM, lambda *_args: controller.request_stop())

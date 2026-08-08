@@ -127,6 +127,17 @@ capability without changing the per-run fallback mode. The runner measures an
 advancing Metrics API timestamp before the 90-run plan, and scheduler records
 persist distinct metrics samples plus every pacing wait start/completion.
 
+## Inference and profiling extension—explicitly not part of the article
+
+The repository has a separate inference ranking policy, a measurement-to-
+annotation profiling pipeline, and a Knative Serving reference workload. This
+extends the proposal's broader AI-task scope but is not used by the locked
+70-run article matrix. Training keeps the exact published `T/R/M/G/C/P` policy;
+inference uses SLO pressure, demand, profiled latency, peak memory, cold start,
+and explicit priority. Mixed-policy bursts fail closed. See
+`docs/INFERENCE_AND_PROFILING.md` for the versioned contract and deployment
+boundary.
+
 ## Production-safe profile—also not an article reproduction
 
 The `production` Helm values run `scheduler.gate_controller`, which removes the
@@ -147,7 +158,7 @@ generated gated workloads also receive default CPU and memory bounds.
 
 | Control | Repository implementation | Acceptance state |
 |---|---|---|
-| Non-root images | UID/GID 10001 in both Dockerfiles | Image build/server pending |
+| Non-root images | UID/GID 10001 in all three Dockerfiles | Image build/server pending |
 | Pinned Python packages | role-specific exact requirements | Local install/import/`pip check` complete; image inspection server pending |
 | Immutable release image | Helm `image.digest` support | Registry digest/server pending |
 | Least-privilege namespace RBAC | Role/RoleBinding; mode-conditional verbs | Server authorization pending |

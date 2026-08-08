@@ -118,6 +118,10 @@ spec:
             {{- else }}
             - "--gate-name"
             - {{ .Values.scheduler.gateName | quote }}
+            {{- if .Values.scheduler.metricsNode }}
+            - "--metrics-node"
+            - {{ .Values.scheduler.metricsNode | quote }}
+            {{- end }}
             {{- end }}
             {{- with .Values.scheduler.extraArgs }}
             {{- toYaml . | nindent 12 }}

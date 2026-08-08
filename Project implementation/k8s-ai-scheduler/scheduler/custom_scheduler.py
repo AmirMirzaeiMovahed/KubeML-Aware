@@ -1,6 +1,8 @@
 """Article-reproduction scheduler using explicit single-node Pod binding.
 
-Production workloads should use :mod:`scheduler.gate_controller`, which leaves feasibility,
+This profile intentionally mirrors the article's manual-binding experiment and
+is constrained to a dedicated, validated single-node target. Production
+workloads should use :mod:`scheduler.gate_controller`, which leaves feasibility,
 scoring and binding to the normal kube-scheduler.
 """
 
@@ -46,7 +48,11 @@ from scheduler.pacing import (  # noqa: E402
     PacingError,
     RealClusterFeedback,
 )
-from scheduler.rank import JobFeatures, compute_ranks, sort_by_rank  # noqa: E402
+from scheduler.rank import (  # noqa: E402
+    JobFeatures,
+    compute_workload_ranks,
+    sort_workloads_by_rank,
+)
 from scheduler.records import AtomicRecordStore, ScheduleRecord  # noqa: E402
 from scheduler.telemetry import (  # noqa: E402
     HealthServer,
@@ -509,9 +515,9 @@ class MLAwareScheduler:
         )
         pods_by_name = {pod.metadata.name: pod for pod in pods}
         jobs = [extract_features(pod) for pod in pods]
-        ranks = compute_ranks(jobs)
+        ranks = compute_workload_ranks(jobs)
         tie_keys = {pod.metadata.name: self._pod_order_key(pod) for pod in pods}
-        ordered = sort_by_rank(
+        ordered = sort_workloads_by_rank(
             jobs,
             reverse_order=settings.reverse,
             tie_breaker=lambda job: tie_keys[job.job_id],

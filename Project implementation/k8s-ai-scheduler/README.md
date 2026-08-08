@@ -19,6 +19,7 @@ numeric confidence intervals from which such a threshold could be justified.
 | `reproduction` | Faithful single-node article experiment | Custom scheduler manually creates Pod bindings | Dedicated disposable single-node cluster only |
 | `reproduction-matrix` | Dynamic controller for the locked 70/90-run protocol | Same manual binding, with each run contract read from Pod annotations | Dedicated disposable single-node cluster only |
 | `production` | Safer integration for real workloads | Controller removes `ml.scheduler/release`; default kube-scheduler performs filtering, scoring, and binding | Kubernetes 1.30+ |
+| `inference` | Profiled latency/SLO extension | Production ranking policy plus a Knative Serving reference service | Kubernetes 1.30+ / Knative |
 
 The reproduction profile intentionally retains the article's no-resource-limit,
 single-node contention experiment. It must not be used as a general-purpose
@@ -33,10 +34,13 @@ The packaged Helm release requires Kubernetes 1.30 or newer for all profiles.
 scheduler/                 Ranking, reproduction scheduler, gated controller
 workload/                  Deterministic paired workload generation
 k8s/                       Synthetic trainer and its container image
+inference/                 Knative-ready reference inference service
+profiling/                 Measured inference profile and annotation CLI
 results/                   Strict collection code and local generated outputs
 sim/                       Proxy simulation and statistical plots
 experiments/               Locked plans, result schema, orchestration, analysis
 deploy/helm/               Reproduction and production Helm profiles
+deploy/knative/            Scale-to-zero inference Serving manifests
 scripts/                   Local build/preflight and Linux server operations
 docs/                      Compliance and pre-cluster acceptance checklists
 ```
@@ -56,7 +60,7 @@ docs/                      Compliance and pre-cluster acceptance checklists
 - Python build frontend: `1.5.0`
 
 Direct dependencies are exactly pinned in `requirements.txt`; transitive
-resolution is frozen in `constraints.txt`. The two container images use
+resolution is frozen in `constraints.txt`. The three container images use
 smaller role-specific requirement files against the same constraints. The default
 base image is versioned (`python:3.11.13-slim-bookworm`); before a controlled
 release, resolve it to a registry-verified `tag@sha256:digest` and pass that
@@ -88,11 +92,12 @@ python .\scripts\build_release.py
 Get-Content .\dist\SHA256SUMS.txt
 ```
 
-Build and optionally push immutable, non-`latest` images:
+Build and optionally push the scheduler, trainer, and inference images with an
+immutable, non-`latest` tag:
 
 ```powershell
 $Registry = "registry.example.com/your-project"
-$Tag = "0.1.0"
+$Tag = "0.2.1"
 docker login ($Registry.Split('/')[0])
 & .\scripts\build-images.ps1 -Registry $Registry -Tag $Tag -Push
 ```
@@ -215,6 +220,10 @@ every run. These control records are covered by the per-run snapshot hash;
 strict resume and analysis reject missing or altered evidence.
 Exact Linux commands are in
 [`run_on_cluster.md`](run_on_cluster.md).
+
+Inference scheduling, measurement JSONL, generated annotations, and the
+Knative deployment boundary are documented in
+[`docs/INFERENCE_AND_PROFILING.md`](docs/INFERENCE_AND_PROFILING.md).
 
 ## Result acceptance rules
 

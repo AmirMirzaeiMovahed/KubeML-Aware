@@ -14,11 +14,14 @@ from scheduler.constants import (
     ANNOTATION_MAP,
     EXPECTED_JOBS_ANNOTATION,
     FIXED_DELAY_ANNOTATION,
+    INFERENCE_ANNOTATION_MAP,
     PACING_MODE_ANNOTATION,
     REVERSE_ANNOTATION,
     RUN_ID_ANNOTATION,
     RUN_ID_LABEL,
+    WORKLOAD_KIND_ANNOTATION,
 )
+from scheduler.rank import InferenceFeatures
 
 
 def make_pod(name="job-a", run_id="run-1", **annotation_overrides):
@@ -69,6 +72,30 @@ def test_strict_feature_extraction():
         extract_features(make_pod(**{ANNOTATION_MAP["R"]: "-1"}))
     with pytest.raises(AnnotationValidationError, match="positive integer"):
         extract_features(make_pod(**{ANNOTATION_MAP["P"]: "1.2"}))
+
+
+def test_inference_feature_extraction_is_explicit_and_strict():
+    annotations = {
+        WORKLOAD_KIND_ANNOTATION: "inference",
+        **{
+            key: str(value)
+            for key, value in zip(
+                INFERENCE_ANNOTATION_MAP.values(),
+                (100, 45, 20, 512, 250, 5),
+                strict=True,
+            )
+        },
+    }
+    features = extract_features(make_pod("serve-a", **annotations))
+    assert isinstance(features, InferenceFeatures)
+    assert features.slo_pressure == pytest.approx(0.45)
+
+    del annotations[INFERENCE_ANNOTATION_MAP["memory_mib"]]
+    with pytest.raises(AnnotationValidationError, match="missing required annotation"):
+        extract_features(make_pod("serve-b", **annotations))
+
+    with pytest.raises(AnnotationValidationError, match="unsupported workload kind"):
+        extract_features(make_pod(**{WORKLOAD_KIND_ANNOTATION: "unknown"}))
 
 
 def test_conflicting_run_label_and_annotation_is_rejected():
