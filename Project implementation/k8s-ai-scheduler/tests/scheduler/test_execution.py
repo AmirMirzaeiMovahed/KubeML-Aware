@@ -29,6 +29,24 @@ def running_pod():
     )
 
 
+def completed_pod(exit_code=0, reason="Completed"):
+    return SimpleNamespace(
+        status=SimpleNamespace(
+            phase="Succeeded" if exit_code == 0 else "Running",
+            reason=None,
+            message=None,
+            container_statuses=[
+                SimpleNamespace(
+                    name="train",
+                    state=SimpleNamespace(
+                        terminated=SimpleNamespace(exit_code=exit_code, reason=reason)
+                    ),
+                )
+            ],
+        )
+    )
+
+
 def test_execution_container_is_explicit_for_ambiguous_pods():
     pod = SimpleNamespace(
         metadata=SimpleNamespace(annotations={}),
@@ -75,6 +93,45 @@ def test_wait_polls_until_valid_marker():
         sleep=clock.sleep,
     ) == 123.0
     assert clock.value == pytest.approx(0.25)
+
+
+def test_wait_allows_final_log_flush_after_clean_completion():
+    clock = FakeClock()
+    logs = iter(["initializing", '[123.0] EXECUTION_STARTED'])
+    core = SimpleNamespace(
+        read_namespaced_pod_log=lambda *_args, **_kwargs: next(logs),
+        read_namespaced_pod_status=lambda *_args, **_kwargs: completed_pod(),
+    )
+    assert wait_for_execution_start(
+        core,
+        "job-a",
+        "test",
+        timeout=2,
+        api_timeout_seconds=1,
+        api_retries=0,
+        poll_interval=0.25,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    ) == 123.0
+    assert clock.value == pytest.approx(0.25)
+
+
+def test_nonzero_termination_still_fails_immediately():
+    core = SimpleNamespace(
+        read_namespaced_pod_log=lambda *_args, **_kwargs: "no marker",
+        read_namespaced_pod_status=lambda *_args, **_kwargs: completed_pod(
+            exit_code=2, reason="Error"
+        ),
+    )
+    with pytest.raises(ExecutionStartError, match="exit_code=2"):
+        wait_for_execution_start(
+            core,
+            "job-a",
+            "test",
+            timeout=1,
+            api_timeout_seconds=1,
+            api_retries=0,
+        )
 
 
 def test_terminal_failure_and_forbidden_logs_fail_immediately():

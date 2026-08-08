@@ -89,10 +89,17 @@ def _pod_terminal_failure(pod: Any) -> Optional[str]:
     for status in statuses:
         terminated = getattr(getattr(status, "state", None), "terminated", None)
         if terminated is not None:
+            exit_code = getattr(terminated, "exit_code", None)
+            reason = getattr(terminated, "reason", None)
+            # A successfully completed container can become terminal just before
+            # its final log chunk is observable through the API. Keep polling so
+            # the durable execution marker gets one or more chances to arrive.
+            if exit_code == 0 and reason == "Completed":
+                continue
             return (
                 f"container {getattr(status, 'name', 'unknown')} terminated before marker "
-                f"(exit_code={getattr(terminated, 'exit_code', 'unknown')}, "
-                f"reason={getattr(terminated, 'reason', 'unknown')})"
+                f"(exit_code={exit_code if exit_code is not None else 'unknown'}, "
+                f"reason={reason or 'unknown'})"
             )
     return None
 
