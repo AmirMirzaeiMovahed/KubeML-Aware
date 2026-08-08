@@ -68,3 +68,32 @@ def test_profile_cli_writes_auditable_annotation_document(tmp_path):
     assert document["profile_kind"] == "inference"
     assert document["sample_count"] == 2
     assert document["features"]["job_id"] == "serve-a"
+
+
+def test_profile_cli_accepts_windows_utf8_bom(tmp_path):
+    source = tmp_path / "powershell-samples.jsonl"
+    source.write_text(
+        json.dumps(
+            {
+                "latency_ms": 10,
+                "requests": 1,
+                "duration_seconds": 0.1,
+                "memory_mib": 64,
+                "cold_start_ms": 20,
+            }
+        ),
+        encoding="utf-8-sig",
+    )
+    output = tmp_path / "profile.json"
+    assert main(
+        [
+            "--input",
+            str(source),
+            "--job-id",
+            "windows-client",
+            "--latency-slo-ms",
+            "25",
+            "--output",
+            str(output),
+        ]
+    ) == 0

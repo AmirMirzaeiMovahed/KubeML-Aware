@@ -24,7 +24,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def _load_samples(path: Path) -> list[InferenceSample]:
     samples = []
-    with path.open("r", encoding="utf-8") as handle:
+    # utf-8-sig accepts ordinary UTF-8 and the BOM emitted by Windows
+    # PowerShell's legacy Set-Content implementation.
+    with path.open("r", encoding="utf-8-sig") as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
                 continue
