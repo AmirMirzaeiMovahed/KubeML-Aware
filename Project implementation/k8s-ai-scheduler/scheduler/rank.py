@@ -1,5 +1,8 @@
-"""
-implementation of the ranking function
+"""Validated implementation of the ranking function from the article.
+
+The article intentionally uses weights whose sum is 1.25. They are kept
+verbatim because multiplying every score by a constant does not change the
+ordering, while changing them would no longer reproduce the published method.
 """
 
 from __future__ import annotations
@@ -39,7 +42,7 @@ class JobFeatures:
 def validate_jobs(jobs: Iterable[JobFeatures]) -> List[JobFeatures]:
     """Return ``jobs`` as a list after strict, deterministic validation.
 
-    All six inputs describe positive quantities.  Missing,
+    All six inputs describe positive quantities in the article. Missing,
     non-numeric, non-finite, zero and negative values are rejected rather than
     silently receiving an advantageous normalized score.  ``P`` is a count and
     therefore must be an integer, though it remains a float-compatible field to
@@ -93,7 +96,7 @@ def _minmax_normalize(
 
 
 def compute_ranks(jobs: Iterable[JobFeatures]) -> Dict[str, float]:
-    """Compute the exact burst-relative weighted rank"""
+    """Compute the exact burst-relative weighted rank from Eq. (1) and (2)."""
 
     validated = validate_jobs(jobs)
     if not validated:

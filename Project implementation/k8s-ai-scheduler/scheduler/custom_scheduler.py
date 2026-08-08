@@ -1,6 +1,8 @@
 """Article-reproduction scheduler using explicit single-node Pod binding.
 
-Production workloads should use :mod:`scheduler.gate_controller`, which leaves feasibility,
+This profile intentionally mirrors the article's manual-binding experiment and
+is constrained to a dedicated, validated single-node target. Production
+workloads should use :mod:`scheduler.gate_controller`, which leaves feasibility,
 scoring and binding to the normal kube-scheduler.
 """
 
