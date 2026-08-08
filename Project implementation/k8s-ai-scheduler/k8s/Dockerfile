@@ -1,7 +1,7 @@
 ARG PYTHON_BASE_IMAGE=python:3.11.13-slim-bookworm
 FROM ${PYTHON_BASE_IMAGE}
 
-ARG APP_VERSION=0.2.0
+ARG APP_VERSION=0.2.1
 LABEL org.opencontainers.image.title="ml-sim-job" \
       org.opencontainers.image.description="Synthetic ML training workload for scheduler experiments" \
       org.opencontainers.image.version="${APP_VERSION}" \

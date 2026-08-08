@@ -5,7 +5,7 @@ import urllib.request
 
 import pytest
 
-from inference.service import InferenceModel, InferenceServer
+from inference.service import InferenceModel, InferenceServer, ProfileState
 
 
 def test_model_is_deterministic_finite_and_normalized():
@@ -13,6 +13,16 @@ def test_model_is_deterministic_finite_and_normalized():
     second = InferenceModel(3, 2, 7).predict([[1, 2, 3]])
     assert first == second
     assert sum(first[0]) == pytest.approx(1.0)
+
+
+def test_profile_sample_rate_uses_observation_window_not_compute_latency():
+    ticks = iter((10.0, 10.5, 11.0, 11.5))
+    profile = ProfileState(20, monotonic=lambda: next(ticks))
+    first = profile.observe(10, 1)
+    second = profile.observe(10, 2)
+    assert first["duration_seconds"] == pytest.approx(0.01)
+    assert second["duration_seconds"] == pytest.approx(0.5)
+    assert profile.snapshot()["observed_items_per_second"] == pytest.approx(2.0)
 
 
 @pytest.fixture

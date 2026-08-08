@@ -2,7 +2,7 @@ apiVersion: v2
 name: ml-ai-scheduler
 description: ML-aware scheduling controller for article reproduction and production-safe gated scheduling
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.2.1
+appVersion: "0.2.1"
 kubeVersion: ">=1.30.0-0"
 

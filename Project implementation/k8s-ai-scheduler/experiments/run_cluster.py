@@ -1875,7 +1875,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument("--plan-out", type=Path, default=ROOT / "results" / "cluster_plan.json")
     parser.add_argument("--work-dir", type=Path, default=ROOT / "workload" / "cluster_runs")
     parser.add_argument("--results-dir", type=Path, default=ROOT / "results" / "cluster")
-    parser.add_argument("--image", default="ml-sim-job:0.2.0")
+    parser.add_argument("--image", default="ml-sim-job:0.2.1")
     parser.add_argument("--namespace", default="ai-scheduler")
     parser.add_argument("--scheduling-gate", default=None)
     parser.add_argument(

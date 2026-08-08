@@ -77,23 +77,32 @@ class InferenceModel:
 
 
 class ProfileState:
-    def __init__(self, cold_start_ms: float):
+    def __init__(self, cold_start_ms: float, *, monotonic=time.monotonic):
         self.cold_start_ms = max(cold_start_ms, 1e-6)
-        self.started_at = time.monotonic()
+        self.monotonic = monotonic
+        self.started_at = self.monotonic()
+        self.last_observed_at: Optional[float] = None
         self.request_count = 0
         self.batch_items = 0
         self.latencies_ms: deque[float] = deque(maxlen=2048)
         self.lock = threading.Lock()
 
     def observe(self, latency_ms: float, batch_items: int) -> dict[str, float | int]:
+        observed_at = self.monotonic()
         with self.lock:
+            duration_seconds = (
+                max(latency_ms / 1000.0, 1e-9)
+                if self.last_observed_at is None
+                else max(observed_at - self.last_observed_at, 1e-9)
+            )
+            self.last_observed_at = observed_at
             self.request_count += 1
             self.batch_items += batch_items
             self.latencies_ms.append(latency_ms)
         sample = {
             "latency_ms": latency_ms,
             "requests": batch_items,
-            "duration_seconds": max(latency_ms / 1000.0, 1e-9),
+            "duration_seconds": duration_seconds,
             "memory_mib": _memory_mib(),
             "cold_start_ms": self.cold_start_ms,
         }
@@ -104,7 +113,7 @@ class ProfileState:
             latencies = list(self.latencies_ms)
             requests = self.request_count
             items = self.batch_items
-        uptime = max(time.monotonic() - self.started_at, 1e-9)
+        uptime = max(self.monotonic() - self.started_at, 1e-9)
         return {
             "model_version": MODEL_VERSION,
             "request_count": requests,

@@ -97,7 +97,7 @@ immutable, non-`latest` tag:
 
 ```powershell
 $Registry = "registry.example.com/your-project"
-$Tag = "0.2.0"
+$Tag = "0.2.1"
 docker login ($Registry.Split('/')[0])
 & .\scripts\build-images.ps1 -Registry $Registry -Tag $Tag -Push
 ```
