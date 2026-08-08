@@ -97,7 +97,7 @@ immutable, non-`latest` tag:
 
 ```powershell
 $Registry = "registry.example.com/your-project"
-$Tag = "0.2.1"
+$Tag = "0.3.0"
 docker login ($Registry.Split('/')[0])
 & .\scripts\build-images.ps1 -Registry $Registry -Tag $Tag -Push
 ```
@@ -163,6 +163,25 @@ second release, and repeats an interrupted pacing delay conservatively. Gated
 manifests receive CPU/memory bounds and an explicit execution-container
 annotation. A stranded run makes `/readyz` fail while `/livez` and metrics stay
 reachable through the Service for diagnosis.
+
+### Train-only FastPath
+
+Release `0.3.0` adds a fail-closed FastPath to the production scheduling-gate
+controller. It activates only for explicitly annotated training bursts whose
+Pod CPU demand is bounded and whose target-node Metrics API sample is fresh.
+The controller ranks the burst with the original six features, admits the
+ranked queue without binding Pods itself, and leaves filtering, scoring and
+placement to `default-scheduler`. A small, deterministic tail-balancing pass
+may permute at most the four lowest-ranked jobs while preserving the priority
+prefix.
+
+The France shared-node production pilot used 12 real NumPy training jobs, five
+paired seeds and a synchronized FIFO launch barrier for the Kubernetes
+baseline. Mean paired improvement was **7.31% for average JCT** and **2.47% for
+makespan**; p95 JCT regressed **0.75%**. This is production-extension evidence,
+not an article-reproduction claim, because the node also hosted VPN services
+and had no GPU. Method, ablations and limitations are in
+[`docs/TRAINING_FAST_PATH.md`](docs/TRAINING_FAST_PATH.md).
 
 ```powershell
 helm lint .\deploy\helm\ml-ai-scheduler

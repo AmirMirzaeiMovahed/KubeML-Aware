@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "kind": "paired-real-training-fast-path-pilot-summary",
+  "date": "2026-08-08",
+  "eligible_for_article_claim": false,
+  "claim_boundary": "Shared France K3s node with colocated VPN services and CPU-only training.",
+  "benchmark_scheduler_image_id": "sha256:0fabc1440414f3234b90747971a2fcad97774c440bc7aa126c58438d4f5f82b9",
+  "workload": {
+    "type": "training-only",
+    "implementation": "versioned NumPy matrix/gradient/checkpoint trainer",
+    "profile": "heavy",
+    "jobs_per_arm": 12,
+    "repetitions": 5,
+    "seeds": [8100, 8101, 8102, 8103, 8104],
+    "cpu_request_and_limit": "1",
+    "baseline": "Kubernetes default-scheduler with synchronized FIFO launch barrier; no custom ranking or binding"
+  },
+  "protected_services": {
+    "openvpn": "Ready before and after; restart count unchanged",
+    "marzban_node": "Ready before and after; restart count unchanged"
+  },
+  "means_seconds": {
+    "baseline": {
+      "average_jct": 31.0466525912,
+      "p95_jct": 52.8960000539,
+      "makespan": 55.3691384792
+    },
+    "kubeml": {
+      "average_jct": 28.7552456816,
+      "p95_jct": 53.2697876120,
+      "makespan": 54.0052120686
+    }
+  },
+  "paired_improvement_percent": {
+    "average_jct": [12.7879676438, 3.3207705009, 4.3597578756, 9.1724967959, 6.8931294195],
+    "p95_jct": [2.1531591039, -0.2434921546, 0.4334098297, -2.4901894074, -3.5944437381],
+    "makespan": [4.0142404924, 0.5456740346, 1.1329392010, 0.8114476976, 5.8690240038]
+  },
+  "mean_paired_improvement_percent": {
+    "average_jct": 7.3068244472,
+    "p95_jct": -0.7483112733,
+    "makespan": 2.4746650859
+  }
+}

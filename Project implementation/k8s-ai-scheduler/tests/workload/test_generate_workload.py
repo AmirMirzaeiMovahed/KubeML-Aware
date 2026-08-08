@@ -12,6 +12,7 @@ from scheduler.constants import (
     REPETITION_LABEL,
     RUN_ID_LABEL,
     SCENARIO_LABEL,
+    WORKLOAD_KIND_ANNOTATION,
 )
 from workload.generate_workload import (
     FEATURE_ANNOTATIONS,
@@ -21,6 +22,7 @@ from workload.generate_workload import (
     build_workload_document,
     estimated_burst_seconds,
     generate_burst,
+    generate_category_burst,
     prepare_output_directory,
     to_pod_yaml,
 )
@@ -43,6 +45,16 @@ def test_burst_is_deterministic_and_ids_depend_on_seed_and_index():
     assert first == second
     assert [job.job_id for job in first] != [job.job_id for job in different]
     assert len({job.job_id for job in first}) == 25
+
+
+def test_category_burst_is_deterministic_and_category_scoped():
+    first = generate_category_burst(12, category="heavy", seed=81)
+    second = generate_category_burst(12, category="heavy", seed=81)
+    assert first == second
+    assert all(job.job_id.startswith("heavy-") for job in first)
+    assert all(512 <= job.M <= 1024 for job in first)
+    with pytest.raises(ValueError, match="unknown category"):
+        generate_category_burst(2, category="generic", seed=81)
 
 
 def test_half_profile_scales_matrix_and_reestimates_duration():
@@ -134,6 +146,7 @@ def test_pod_yaml_is_valid_and_contains_run_contract():
     assert annotations["ml.scheduler/expected-jobs"] == "12"
     assert annotations["ml.scheduler/work-model-version"] == WORK_MODEL_VERSION
     assert annotations["ml.scheduler/blas-threads"] == "1"
+    assert annotations[WORKLOAD_KIND_ANNOTATION] == "training"
     environment = {
         item["name"]: item.get("value")
         for item in manifest["spec"]["containers"][0]["env"]

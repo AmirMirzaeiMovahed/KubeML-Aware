@@ -43,7 +43,10 @@ from k8s.work_model import (  # noqa: E402
     estimate_work,
     model_assumptions,
 )
-from scheduler.constants import EXECUTION_CONTAINER_ANNOTATION  # noqa: E402
+from scheduler.constants import (  # noqa: E402
+    EXECUTION_CONTAINER_ANNOTATION,
+    WORKLOAD_KIND_ANNOTATION,
+)
 from scheduler.rank import JobFeatures, compute_ranks  # noqa: E402
 
 WORKLOAD_SCHEMA_VERSION = "1.1"
@@ -340,6 +343,28 @@ def generate_burst(n_jobs: int, seed: Optional[int] = None, load: str = "normal"
     return jobs
 
 
+def generate_category_burst(
+    n_jobs: int,
+    *,
+    category: str,
+    seed: Optional[int] = None,
+) -> List[JobFeatures]:
+    """Generate a deterministic burst drawn entirely from one ML category."""
+
+    if not isinstance(n_jobs, int) or n_jobs <= 0:
+        raise ValueError("n_jobs must be a positive integer")
+    if category not in CATEGORY_RANGES:
+        raise ValueError(f"unknown category: {category!r}")
+    resolved_seed = 42 if seed is None else seed
+    if not isinstance(resolved_seed, int) or resolved_seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    rng = random.Random(resolved_seed)
+    return [
+        _sample_category(category, rng, seed=resolved_seed, index=index)
+        for index in range(n_jobs)
+    ]
+
+
 def load_profile_evidence(
     jobs: Sequence[JobFeatures], *, seed: int, load: str
 ) -> Dict[str, Any]:
@@ -482,6 +507,7 @@ def _pod_manifest(
         FEATURE_ANNOTATIONS[name]: str(getattr(job, name)) for name in FEATURE_NAMES
     }
     annotations.update({
+        WORKLOAD_KIND_ANNOTATION: "training",
         RUN_ANNOTATIONS["run_id"]: run_id,
         RUN_ANNOTATIONS["pacing_mode"]: pacing_mode,
         RUN_ANNOTATIONS["fixed_delay_seconds"]: str(float(fixed_delay_seconds)),
@@ -691,7 +717,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", default="./workload_out")
     parser.add_argument("--scheduler-name", default="ml-aware-scheduler")
-    parser.add_argument("--image", default="ml-sim-job:0.2.1")
+    parser.add_argument("--image", default="ml-sim-job:0.3.0")
     parser.add_argument("--namespace", default="default")
     parser.add_argument("--run-id", default="manual-run")
     parser.add_argument("--scenario", default=None)

@@ -80,7 +80,7 @@ unverified value from documentation.
 ```bash
 export REGISTRY='registry.example.com/your-project'
 export REGISTRY_HOST='registry.example.com'
-export TAG='0.2.1'
+export TAG='0.3.0'
 export PYTHON_BASE_IMAGE='python:3.11.13-slim-bookworm'
 
 docker login "$REGISTRY_HOST"
