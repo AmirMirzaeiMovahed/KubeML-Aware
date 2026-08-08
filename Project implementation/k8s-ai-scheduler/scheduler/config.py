@@ -25,6 +25,8 @@ class SchedulerConfig:
     adaptive_hysteresis: float = 0.05
     max_wait: float = 30.0
     metrics_max_age: float = 30.0
+    fast_path_enabled: bool = False
+    fast_path_cpu_threshold: float = 0.80
     execution_timeout: float = 120.0
     api_timeout: float = 10.0
     api_retries: int = 4
@@ -49,6 +51,8 @@ class SchedulerConfig:
             "adaptive_hysteresis": self.adaptive_hysteresis,
             "max_wait_seconds": self.max_wait,
             "metrics_max_age_seconds": self.metrics_max_age,
+            "fast_path_enabled": self.fast_path_enabled,
+            "fast_path_cpu_threshold": self.fast_path_cpu_threshold,
         }
 
     def validate(self, *, manual_binding: bool = False) -> "SchedulerConfig":
@@ -81,6 +85,8 @@ class SchedulerConfig:
             raise ConfigurationError("pacing_mode must be none, fixed, or adaptive")
         if not 0 < self.cpu_threshold <= 1:
             raise ConfigurationError("cpu_threshold must be in (0, 1]")
+        if not 0 < self.fast_path_cpu_threshold <= 1:
+            raise ConfigurationError("fast_path_cpu_threshold must be in (0, 1]")
         if not 0 <= self.adaptive_hysteresis < self.cpu_threshold:
             raise ConfigurationError(
                 "adaptive_hysteresis must be >= 0 and smaller than cpu_threshold"

@@ -34,6 +34,7 @@ def make_pod(name="job-a", run_id="run-1", **annotation_overrides):
         ANNOTATION_MAP["P"]: "1",
         RUN_ID_ANNOTATION: run_id,
         EXPECTED_JOBS_ANNOTATION: "2",
+        WORKLOAD_KIND_ANNOTATION: "training",
     }
     annotations.update(annotation_overrides)
     return SimpleNamespace(
@@ -72,6 +73,11 @@ def test_strict_feature_extraction():
         extract_features(make_pod(**{ANNOTATION_MAP["R"]: "-1"}))
     with pytest.raises(AnnotationValidationError, match="positive integer"):
         extract_features(make_pod(**{ANNOTATION_MAP["P"]: "1.2"}))
+
+    missing_kind = make_pod()
+    del missing_kind.metadata.annotations[WORKLOAD_KIND_ANNOTATION]
+    with pytest.raises(AnnotationValidationError, match="workload-kind"):
+        extract_features(missing_kind)
 
 
 def test_inference_feature_extraction_is_explicit_and_strict():

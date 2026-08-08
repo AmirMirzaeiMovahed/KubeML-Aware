@@ -69,7 +69,11 @@ def extract_features(pod: Any) -> WorkloadFeatures:
     if not isinstance(name, str) or not name:
         raise AnnotationValidationError("pod metadata.name is missing")
     annotations = _metadata_map(pod, "annotations")
-    workload_kind = str(annotations.get(WORKLOAD_KIND_ANNOTATION, "training")).strip().lower()
+    if WORKLOAD_KIND_ANNOTATION not in annotations:
+        raise AnnotationValidationError(
+            f"pod {name!r} is missing required annotation {WORKLOAD_KIND_ANNOTATION!r}"
+        )
+    workload_kind = str(annotations[WORKLOAD_KIND_ANNOTATION]).strip().lower()
     if workload_kind == "inference":
         values: Dict[str, float] = {}
         for feature, key in INFERENCE_ANNOTATION_MAP.items():

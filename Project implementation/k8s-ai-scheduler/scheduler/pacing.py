@@ -26,6 +26,7 @@ class PacingInterrupted(RuntimeError):
 class MetricsSample:
     utilization: float
     observed_at: float
+    allocatable_cores: Optional[float] = None
 
 
 def _parse_rfc3339(value: str) -> float:
@@ -93,7 +94,11 @@ class RealClusterFeedback:
             utilization = used_cores / self.allocatable_cores
             if utilization < 0:
                 raise ValueError("negative utilization")
-            return MetricsSample(utilization=utilization, observed_at=observed_at)
+            return MetricsSample(
+                utilization=utilization,
+                observed_at=observed_at,
+                allocatable_cores=self.allocatable_cores,
+            )
         except Exception as exc:
             if isinstance(exc, FeedbackUnavailable):
                 raise
@@ -186,6 +191,7 @@ class ClusterMetricsFeedback:
                 utilization=used / sum(capacities.values()),
                 # The oldest component determines aggregate freshness.
                 observed_at=min(observed),
+                allocatable_cores=sum(capacities.values()),
             )
         except Exception as exc:
             if isinstance(exc, FeedbackUnavailable):

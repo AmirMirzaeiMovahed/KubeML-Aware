@@ -13,10 +13,16 @@ from scheduler.constants import (
     RELEASE_GATE,
     RUN_ID_ANNOTATION,
     RUN_ID_LABEL,
+    WORKLOAD_KIND_ANNOTATION,
 )
 from scheduler.custom_scheduler import ManualBindingSafetyError, MLAwareScheduler
-from scheduler.gate_controller import ControllerStopping, SchedulingGateController
-from scheduler.pacing import ClusterMetricsFeedback, RealClusterFeedback
+from scheduler.execution import JobCompletionResult
+from scheduler.gate_controller import (
+    ControllerStopping,
+    GateReleaseError,
+    SchedulingGateController,
+)
+from scheduler.pacing import ClusterMetricsFeedback, MetricsSample, RealClusterFeedback
 
 
 def node():
@@ -39,6 +45,7 @@ def annotations(*, best=False):
         values = dict(T="9", R="1", M="9", G="9", C="1", P="9")
     result = {ANNOTATION_MAP[key]: value for key, value in values.items()}
     result[EXPECTED_JOBS_ANNOTATION] = "2"
+    result[WORKLOAD_KIND_ANNOTATION] = "training"
     return result
 
 
@@ -210,13 +217,17 @@ def make_gate(tmp_path, core=None):
         api_retries=0,
         results_path=str(tmp_path / "gate.json"),
     )
-    return SchedulingGateController(
+    controller = SchedulingGateController(
         config,
         core_api=core or GateCore(),
         custom_api=SimpleNamespace(),
         load_config=False,
         enable_health_server=False,
     )
+    controller._wait_for_job_completion = lambda *_args, **_kwargs: (
+        JobCompletionResult(True, "completed", 103.0)
+    )
+    return controller
 
 
 def test_gate_removal_uses_guarded_json_patch_and_is_idempotent(tmp_path):
@@ -288,11 +299,106 @@ def test_gate_process_keeps_normal_scheduler_and_records_release(tmp_path):
         RunSettings("run-1", 2, "none", 0, False), one_shot=True
     )
     assert released == ["best", "worst"]
-    assert [record.status for record in records] == ["execution_started", "execution_started"]
+    assert [record.status for record in records] == ["completed", "completed"]
     assert all(item.spec.scheduler_name == "default-scheduler" for item in pods)
     document = json.loads((tmp_path / "gate.json").read_text())
     assert document["metadata"]["profile"] == "production-scheduling-gate"
     assert document["status"] == "completed"
+
+
+def test_gate_fast_path_batch_releases_training_before_marker_wait(tmp_path):
+    controller = make_gate(tmp_path)
+    controller.config.fast_path_enabled = True
+    controller.config.fast_path_cpu_threshold = 0.8
+    controller.wall_time = lambda: 100.0
+    controller.feedback = SimpleNamespace(
+        sample=lambda: MetricsSample(0.1, 100.0, 4.0)
+    )
+    pods = [pod("worst", gated=True), pod("best", best=True, gated=True)]
+    for item in pods:
+        item.spec.containers[0].resources = SimpleNamespace(
+            requests={"cpu": "100m"}, limits={"cpu": "200m"}
+        )
+    released = []
+    controller._collect = lambda _settings: pods
+    controller._remove_gate = released.append
+
+    def wait_after_batch(name, **_kwargs):
+        assert released == ["best", "worst"]
+        return {"best": 101.0, "worst": 102.0}[name]
+
+    controller._wait_for_execution_start = wait_after_batch
+    records = controller.process_run(
+        RunSettings("run-1", 2, "none", 0, False), one_shot=True
+    )
+    assert [record.status for record in records] == [
+        "completed",
+        "completed",
+    ]
+    document = json.loads((tmp_path / "gate.json").read_text())
+    decision = next(
+        event for event in document["events"] if event["event"] == "fast_path_decision"
+    )
+    assert decision["selected"] is True
+    assert decision["reason"] == "fresh_cpu_headroom"
+
+
+def test_contended_gate_keeps_ranked_headroom_window(tmp_path):
+    controller = make_gate(tmp_path)
+    controller.config.fast_path_enabled = True
+    controller.config.fast_path_cpu_threshold = 0.8
+    controller.wall_time = lambda: 100.0
+    controller.feedback = SimpleNamespace(
+        sample=lambda: MetricsSample(0.3, 100.0, 4.0)
+    )
+    pods = [
+        pod("best", best=True, gated=True),
+        pod("middle-a", gated=True),
+        pod("middle-b", gated=True),
+        pod("critical-tail", gated=True),
+    ]
+    pods[-1].metadata.annotations[ANNOTATION_MAP["T"]] = "50"
+    for item in pods:
+        item.spec.containers[0].resources = SimpleNamespace(
+            requests={"cpu": "1"}, limits={"cpu": "1"}
+        )
+    released = []
+    controller._collect = lambda _settings: pods
+    controller._remove_gate = released.append
+
+    waits = []
+
+    def wait_after_window(name, **_kwargs):
+        waits.append(name)
+        if name in {"best", "middle-a"}:
+            assert released == [
+                "best",
+                "middle-a",
+                "middle-b",
+                "critical-tail",
+            ]
+        return 101.0 + len(released)
+
+    controller._wait_for_execution_start = wait_after_window
+    records = controller.process_run(
+        RunSettings("run-1", 4, "none", 0, False), one_shot=True
+    )
+    assert len(records) == 4
+    document = json.loads((tmp_path / "gate.json").read_text())
+    decision = next(
+        event for event in document["events"] if event["event"] == "fast_path_decision"
+    )
+    assert decision["selected"] is True
+    assert decision["reason"] == "ranked_queue_prefill"
+    assert decision["initial_release_count"] == 4
+    assert decision["headroom_release_count"] == 2
+    assert waits[:2] == ["best", "middle-a"]
+    assert waits[-1] == "critical-tail"
+    tail_plan = next(
+        event for event in document["events"] if event["event"] == "training_tail_balance"
+    )
+    assert tail_plan["selected"] is False
+    assert tail_plan["reason"] == "tail_too_small"
 
 
 def test_gate_controller_resumes_partial_run_without_duplicate_release(tmp_path):
@@ -336,8 +442,8 @@ def test_gate_controller_resumes_partial_run_without_duplicate_release(tmp_path)
     records = recovered.process_run(settings, one_shot=True)
     assert recovered_releases == ["worst"]
     assert [record.status for record in records] == [
-        "execution_started",
-        "execution_started",
+        "completed",
+        "completed",
     ]
     document = json.loads((tmp_path / "gate.json").read_text())
     assert document["schema_version"] == 3
@@ -366,6 +472,32 @@ def test_gate_failure_marks_readiness_degraded(tmp_path):
     _live, ready, reason = controller.health.snapshot()
     assert ready is False
     assert "run run-1 failed" in reason
+
+
+def test_gate_completion_failure_is_observed_after_all_jobs_are_admitted(tmp_path):
+    controller = make_gate(tmp_path)
+    pods = [pod("worst", gated=True), pod("best", best=True, gated=True)]
+    released = []
+    controller._collect = lambda _settings: pods
+    controller._remove_gate = released.append
+    controller._wait_for_execution_start = lambda *_args, **_kwargs: 101.0
+    controller._wait_for_job_completion = lambda *_args, **_kwargs: (
+        JobCompletionResult(False, "trainer failed", 102.0)
+    )
+
+    with pytest.raises(GateReleaseError, match="trainer failed"):
+        controller.process_run(
+            RunSettings("run-1", 2, "none", 0, False), one_shot=True
+        )
+
+    assert released == ["best", "worst"]
+    document = json.loads((tmp_path / "gate.json").read_text())
+    assert document["status"] == "failed"
+    assert any(
+        event["event"] == "job_completion_observed"
+        and event["success"] is False
+        for event in document["events"]
+    )
 
 
 def test_gate_shutdown_leaves_resumable_running_state(tmp_path):

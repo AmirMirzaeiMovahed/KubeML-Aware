@@ -9,9 +9,9 @@ import time
 from typing import Any, Callable, Optional
 
 from .constants import (
+    EXECUTION_COMPLETED_EVENT,
     EXECUTION_CONTAINER_ANNOTATION,
     EXECUTION_EVENT,
-    EXECUTION_COMPLETED_EVENT,
     EXECUTION_FAILED_EVENT,
 )
 from .kube import (

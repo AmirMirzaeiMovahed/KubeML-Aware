@@ -187,6 +187,14 @@ def default_metrics() -> MetricsRegistry:
         "ml_scheduler_bursts_total": ("counter", "Burst processing attempts."),
         "ml_scheduler_burst_jobs": ("gauge", "Jobs observed in the current burst."),
         "ml_scheduler_releases_total": ("counter", "Successfully bound or released jobs."),
+        "ml_scheduler_fast_path_decisions_total": (
+            "counter",
+            "Training burst fast-path decisions by selected state.",
+        ),
+        "ml_scheduler_job_failures_total": (
+            "counter",
+            "Observed workload completion failures by scheduler profile.",
+        ),
         "ml_scheduler_failures_total": ("counter", "Scheduler failures by stage."),
         "ml_scheduler_api_retries_total": ("counter", "Kubernetes API retries."),
         "ml_scheduler_cpu_utilization_ratio": ("gauge", "Latest target-node CPU ratio."),
@@ -196,4 +204,3 @@ def default_metrics() -> MetricsRegistry:
     for name, (kind, help_text) in definitions.items():
         registry.define(name, kind, help_text)
     return registry
-
