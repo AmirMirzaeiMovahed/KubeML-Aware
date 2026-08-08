@@ -26,6 +26,7 @@ spec:
         {{- end }}
       labels:
         {{- include "ml-ai-scheduler.selectorLabels" . | nindent 8 }}
+        {{- if eq .Values.mode "reproduction" }}
         {{- if .Values.experiment.runId }}
         ml.scheduler/run-id: {{ .Values.experiment.runId | quote }}
         {{- end }}
@@ -37,6 +38,7 @@ spec:
         {{- end }}
         {{- if .Values.experiment.repetition }}
         ml.scheduler/repetition: {{ .Values.experiment.repetition | quote }}
+        {{- end }}
         {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}

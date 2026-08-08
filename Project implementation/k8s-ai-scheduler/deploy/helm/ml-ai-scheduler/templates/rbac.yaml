@@ -14,12 +14,15 @@ rules:
     verbs: ["get"]
   {{- if eq .Values.mode "reproduction" }}
   - apiGroups: [""]
-    resources: ["pods/binding"]
+    resources: ["bindings"]
     verbs: ["create"]
   {{- else }}
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["patch"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get"]
   {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

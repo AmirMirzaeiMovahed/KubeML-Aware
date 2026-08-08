@@ -213,7 +213,8 @@ class SingleNodeGateController:
     def _pod_order_key(pod: Any):
         metadata = getattr(pod, "metadata", None)
         created = getattr(metadata, "creation_timestamp", None)
-        if hasattr(created, "isoformat"):
+        # creation_timestamp may be None or a datetime-like object
+        if created is not None and hasattr(created, "isoformat"):
             created = created.isoformat()
         return (
             str(created or ""),

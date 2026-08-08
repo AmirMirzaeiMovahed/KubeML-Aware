@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: workload-3
+  labels:
+    ml.scheduler/run-id: run-small
+  annotations:
+    ml.scheduler/run-id: run-small
+    ml.scheduler/estimated-training-time: "90"
+    ml.scheduler/loss-reduction-rate: "0.4"
+    ml.scheduler/matrix-size: "256"
+    ml.scheduler/gradient-update-size: "64"
+    ml.scheduler/checkpoint-interval: "15"
+    ml.scheduler/model-partitions: "1"
+spec:
+  schedulerName: default-scheduler
+  schedulingGates:
+  - name: ml.scheduler/release
+  containers:
+  - name: train
+    image: nginx
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "200m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"

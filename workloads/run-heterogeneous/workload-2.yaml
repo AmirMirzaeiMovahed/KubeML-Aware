@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: workload-2
+  labels:
+    ml.scheduler/run-id: run-heterogeneous
+  annotations:
+    ml.scheduler/run-id: run-heterogeneous
+    ml.scheduler/estimated-training-time: "200"
+    ml.scheduler/loss-reduction-rate: "0.2"
+    ml.scheduler/matrix-size: "512"
+    ml.scheduler/gradient-update-size: "128"
+    ml.scheduler/checkpoint-interval: "50"
+    ml.scheduler/model-partitions: "2"
+spec:
+  schedulerName: default-scheduler
+  schedulingGates:
+  - name: ml.scheduler/release
+  containers:
+  - name: train
+    image: nginx
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
