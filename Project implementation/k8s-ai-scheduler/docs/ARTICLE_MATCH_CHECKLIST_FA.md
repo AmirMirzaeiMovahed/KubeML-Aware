@@ -106,7 +106,7 @@ Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 ## چک‌لیست Go/No-Go برای ادعای بازتولید مقاله
 
 - [x] الگوریتم، workload، Plan، schema، تست و manifests محلی کامل‌اند.
-- [x] 126 تست خودکار بدون skip یا failure پاس شده‌اند.
+- [x] 145 تست خودکار بدون skip یا failure پاس شده‌اند.
 - [x] Helm lint و schema سخت‌گیرانه Kubernetes 1.36 پاس شده است.
 - [x] Plan Lock دقیق 70 و 90 آماده است.
 - [ ] هر دو Docker image روی سرور build و smoke شوند.
@@ -122,3 +122,7 @@ Planها با ترتیب deterministic-randomized-blocks قفل شده‌اند:
 
 تا تکمیل همه موارد `[ ]` مرتبط، وضعیت صحیح پروژه «آمادهٔ ورود به فاز
 راه‌اندازی/اعتبارسنجی Kubernetes» است، نه «مقاله با موفقیت بازتولید شد».
+
+ممیزی عددبه‌عدد ادعاهای منتشرشده و مرز دقیق شواهد اجرای فرانسه در
+`docs/ARTICLE_CLAIM_STATUS_FA.md` ثبت شده است. راهنمای ورود و snapshot معماری
+فرانسه نیز در `docs/FRANCE_ACCESS_AND_TOPOLOGY_FA.md` قرار دارد.

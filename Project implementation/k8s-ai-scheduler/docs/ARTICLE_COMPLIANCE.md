@@ -6,6 +6,10 @@ Kubernetes* (2025).
 This document is an implementation traceability record, not a claim that the
 published measurements have already been reproduced.
 
+The current Persian claim-by-claim audit, including every published aggregate,
+the nine effect claims, the live France evidence boundary, and disclosed
+article inconsistencies, is in `docs/ARTICLE_CLAIM_STATUS_FA.md`.
+
 ## Status legend
 
 - **Implemented/local**: source and local validation path exist.
