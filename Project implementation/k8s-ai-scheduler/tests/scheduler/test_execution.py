@@ -95,6 +95,26 @@ def test_wait_polls_until_valid_marker():
     assert clock.value == pytest.approx(0.25)
 
 
+def test_wait_reads_raw_json_log_response_without_client_coercion():
+    marker = b'{"event":"EXECUTION_STARTED","timestamp":123.5,"job_id":"job-a"}'
+    core = SimpleNamespace(
+        read_namespaced_pod_log=lambda *_args, **kwargs: (
+            SimpleNamespace(data=marker)
+            if kwargs.get("_preload_content") is False
+            else pytest.fail("log request must disable client-side content coercion")
+        ),
+        read_namespaced_pod_status=lambda *_args, **_kwargs: running_pod(),
+    )
+    assert wait_for_execution_start(
+        core,
+        "job-a",
+        "test",
+        timeout=1,
+        api_timeout_seconds=1,
+        api_retries=0,
+    ) == 123.5
+
+
 def test_wait_allows_final_log_flush_after_clean_completion():
     clock = FakeClock()
     logs = iter(["initializing", '[123.0] EXECUTION_STARTED'])

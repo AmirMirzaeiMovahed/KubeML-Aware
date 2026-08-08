@@ -79,6 +79,22 @@ def parse_execution_marker(log_text: str, *, expected_job_id: Optional[str] = No
     return None
 
 
+def _raw_log_text(response: Any) -> str:
+    """Return exact log bytes without the Kubernetes client's JSON coercion."""
+
+    value = getattr(response, "data", response)
+    if isinstance(value, bytes):
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ExecutionStartError("execution log is not valid UTF-8") from exc
+    if isinstance(value, str):
+        return value
+    raise ExecutionStartError(
+        f"execution log API returned unsupported payload type {type(value).__name__}"
+    )
+
+
 def _pod_terminal_failure(pod: Any) -> Optional[str]:
     phase = getattr(getattr(pod, "status", None), "phase", None)
     if phase == "Failed":
@@ -130,13 +146,16 @@ def wait_for_execution_start(
                     namespace,
                     container=container,
                     timestamps=False,
+                    _preload_content=False,
                     _request_timeout=api_timeout(api_timeout_seconds),
                 ),
                 operation=f"read execution log for {pod_name}",
                 retries=api_retries,
                 log_read=True,
             )
-            marker = parse_execution_marker(logs, expected_job_id=pod_name)
+            marker = parse_execution_marker(
+                _raw_log_text(logs), expected_job_id=pod_name
+            )
             if marker is not None:
                 return marker
             last_observation = "container logs did not contain a valid marker"
