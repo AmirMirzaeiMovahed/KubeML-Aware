@@ -33,6 +33,8 @@
         "name",
         "pacingMode",
         "fixedDelaySeconds",
+        "fastPathEnabled",
+        "fastPathCpuThreshold",
         "expectedCount",
         "targetNode",
         "resultsPath"
@@ -47,6 +49,8 @@
         "cpuThreshold": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
         "maxWaitSeconds": {"type": "number", "exclusiveMinimum": 0},
         "metricsMaxAgeSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "fastPathEnabled": {"type": "boolean"},
+        "fastPathCpuThreshold": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
         "adaptiveHysteresis": {"type": "number", "minimum": 0, "maximum": 1},
         "expectedCount": {"type": "integer", "minimum": 0},
         "quietPeriodSeconds": {"type": "number", "exclusiveMinimum": 0},

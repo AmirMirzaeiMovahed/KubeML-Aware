@@ -79,6 +79,11 @@ spec:
             - {{ .Values.scheduler.maxWaitSeconds | quote }}
             - "--metrics-max-age"
             - {{ .Values.scheduler.metricsMaxAgeSeconds | quote }}
+            - "--fast-path-cpu-threshold"
+            - {{ .Values.scheduler.fastPathCpuThreshold | quote }}
+            {{- if .Values.scheduler.fastPathEnabled }}
+            - "--fast-path"
+            {{- end }}
             - "--adaptive-hysteresis"
             - {{ .Values.scheduler.adaptiveHysteresis | quote }}
             - "--quiet-period"

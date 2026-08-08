@@ -1,7 +1,7 @@
 ARG PYTHON_BASE_IMAGE=python:3.11.13-slim-bookworm
 FROM ${PYTHON_BASE_IMAGE}
 
-ARG APP_VERSION=0.2.1
+ARG APP_VERSION=0.3.0
 LABEL org.opencontainers.image.title="ml-aware-scheduler" \
       org.opencontainers.image.description="ML-aware Kubernetes scheduling controller" \
       org.opencontainers.image.version="${APP_VERSION}" \

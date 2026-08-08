@@ -3,7 +3,7 @@ replicaCount: 1
 
 image:
   repository: ml-aware-scheduler
-  tag: "0.2.1"
+  tag: "0.3.0"
   digest: ""
   pullPolicy: IfNotPresent
 
@@ -13,6 +13,10 @@ scheduler:
   name: default-scheduler
   gateName: ml.scheduler/release
   pacingMode: none
+  fastPathEnabled: true
+  fastPathCpuThreshold: 0.85
+  quietPeriodSeconds: 0.25
+  pollIntervalSeconds: 0.2
   expectedCount: 0
   resultsPath: "/results/gate-{run_id}.json"
 

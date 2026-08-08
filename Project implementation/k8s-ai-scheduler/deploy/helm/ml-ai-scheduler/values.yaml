@@ -8,7 +8,7 @@ fullnameOverride: ""
 
 image:
   repository: ml-aware-scheduler
-  tag: "0.2.1"
+  tag: "0.3.0"
   # Prefer an immutable sha256 digest on a shared/production cluster.
   digest: ""
   pullPolicy: IfNotPresent
@@ -26,6 +26,10 @@ scheduler:
   # matrix runner measures timestamp advancement before adaptive execution.
   maxWaitSeconds: 90
   metricsMaxAgeSeconds: 30
+  # Training-only batch release. Missing/stale Metrics API data or projected
+  # CPU above this threshold fails closed to the ranked admission path.
+  fastPathEnabled: false
+  fastPathCpuThreshold: 0.80
   adaptiveHysteresis: 0.05
   expectedCount: 0
   quietPeriodSeconds: 1.5
