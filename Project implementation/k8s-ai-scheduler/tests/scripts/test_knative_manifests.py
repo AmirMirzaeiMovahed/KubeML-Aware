@@ -34,3 +34,14 @@ def test_knative_namespace_enforces_restricted_pod_security():
     document = load("namespace.yaml")
     labels = document["metadata"]["labels"]
     assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
+
+
+def test_france_ingress_bridges_existing_nginx_to_cluster_local_kourier():
+    document = load("france-ingress.yaml")
+    assert document["kind"] == "Ingress"
+    assert document["metadata"]["namespace"] == "kourier-system"
+    assert document["spec"]["ingressClassName"] == "nginx"
+    rule = document["spec"]["rules"][0]
+    assert rule["host"].endswith(".167-104-216-211.nip.io")
+    backend = rule["http"]["paths"][0]["backend"]["service"]
+    assert backend == {"name": "kourier", "port": {"number": 80}}

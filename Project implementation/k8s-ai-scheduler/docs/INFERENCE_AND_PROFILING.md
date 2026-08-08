@@ -61,6 +61,9 @@ For the documented air-gapped/local-image manifest, import the image as
 `registry.local/kubeml/ml-inference-service:0.2.0` and add `registry.local` to
 Knative's `registries-skipping-tag-resolving`; production registries should use
 an immutable digest instead.
+The France deployment keeps Kourier as a `ClusterIP` to avoid competing with
+the existing ingress controller and VPN listeners. Its reviewed ingress bridge
+is `deploy/knative/france-ingress.yaml`.
 The Knative Service scales from zero to at most two replicas by default. Keep
 the scheduler controller as a normal Kubernetes Deployment; it is a long-lived
 reconciler, while Knative is used for the request-driven inference workload.
