@@ -190,6 +190,11 @@ labels are pre-registered in `experiments/scenarios.yaml` and documented in
 materializes, and—only with explicit `--execute`—runs the plan; see the server
 runbook before enabling execution.
 
+The current Persian claim audit is `docs/ARTICLE_CLAIM_STATUS_FA.md`. It keeps
+published values separate from observed project evidence. France SSH/K9s access
+and the live topology snapshot are documented in
+`docs/FRANCE_ACCESS_AND_TOPOLOGY_FA.md`.
+
 Cluster execution never applies a category-named manifest directory with
 `kubectl`. The runner submits every Pod through a seed-controlled concurrent
 Kubernetes API barrier, records the actual server creation timestamps, and
