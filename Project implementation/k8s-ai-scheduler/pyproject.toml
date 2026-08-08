@@ -28,6 +28,7 @@ ml-analyze = "experiments.analyze:main"
 ml-collect = "results.metrics_collector:main"
 ml-calibrate-trainer = "sim.calibration:main"
 ml-validate-manifests = "scripts.validate_manifests:main"
+ml-profile-inference = "profiling.cli:main"
 
 [project.optional-dependencies]
 test = [
@@ -46,7 +47,7 @@ select = ["E4", "E7", "E9", "F", "I", "B"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["scheduler*", "workload*", "results*", "sim*", "experiments*", "k8s*", "scripts*"]
+include = ["scheduler*", "workload*", "results*", "sim*", "experiments*", "k8s*", "scripts*", "profiling*", "inference*"]
 
 [tool.setuptools.package-data]
 experiments = ["scenarios.yaml", "article_reference.yaml", "locks/*.json"]
