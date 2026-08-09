@@ -15,7 +15,7 @@ import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -68,6 +68,7 @@ class SimulationSettings:
     cpu_threshold: float = 0.85
     max_wait: float = 6.0
     max_time: float = 100000.0
+    tail_window: int = 4
     work_model: TrainerWorkModel = TrainerWorkModel()
 
     def validate(self) -> None:
@@ -87,6 +88,12 @@ class SimulationSettings:
             raise ValueError("cpu_threshold must be in (0, 1]")
         if not math.isfinite(self.max_wait) or self.max_wait < 0:
             raise ValueError("max_wait must be finite and >= 0")
+        if (
+            not isinstance(self.tail_window, int)
+            or isinstance(self.tail_window, bool)
+            or self.tail_window < 2
+        ):
+            raise ValueError("tail_window must be an integer >= 2")
         self.work_model.validate()
 
 
@@ -104,6 +111,7 @@ def _simulate_config(
     *,
     seed: int,
     settings: SimulationSettings,
+    on_tail_plan: Optional[Callable[[Mapping[str, Any]], None]] = None,
 ) -> List[SimResult]:
     common = {
         "n_cores": settings.n_cores,
@@ -121,6 +129,16 @@ def _simulate_config(
         )
     if config_name == "custom-baseline":
         return run_paced(jobs, mode="fixed", inherent_gap=settings.inherent_gap, **common)
+    if config_name == "custom-tail-balanced":
+        return run_paced(
+            jobs,
+            mode="fixed",
+            inherent_gap=settings.inherent_gap,
+            balance_tail=True,
+            tail_window=settings.tail_window,
+            on_tail_plan=on_tail_plan,
+            **common,
+        )
     if config_name == "reversed":
         return run_paced(
             jobs, mode="fixed", inherent_gap=settings.inherent_gap, reverse=True, **common,
@@ -156,11 +174,28 @@ def _result_document(
     repetition: int,
     seed: int,
     settings: SimulationSettings,
+    tail_plan: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     job_by_id = {job.job_id: job for job in jobs}
     rows = results_to_dicts(list(results))
     for row in rows:
         row["category"] = category_for_job(job_by_id[row["job_id"]])
+    simulation_environment: Dict[str, Any] = {
+        **{key: value for key, value in asdict(settings).items() if key != "work_model"},
+        "work_model": asdict(settings.work_model),
+        "calibration_status": (
+            "hardware-calibrated"
+            if settings.work_model.calibrated
+            else "uncalibrated-assumptions"
+        ),
+        "claim_eligibility": "exploratory-only",
+        "warning": "Proxy model; final claims require real Kubernetes measurements.",
+    }
+    if tail_plan is not None:
+        # Persist the tail balancer's evidence so a ``custom-tail-balanced`` run
+        # is auditable the same way the gate controller's
+        # ``training_tail_balance`` event is.
+        simulation_environment["tail_balance"] = dict(tail_plan)
     document = make_result_document(
         run_id=run_id,
         scenario=scenario,
@@ -169,19 +204,7 @@ def _result_document(
         seed=seed,
         expected_jobs=len(jobs),
         jobs=rows,
-        environment={
-            "simulation": {
-                **{key: value for key, value in asdict(settings).items() if key != "work_model"},
-                "work_model": asdict(settings.work_model),
-                "calibration_status": (
-                    "hardware-calibrated"
-                    if settings.work_model.calibrated
-                    else "uncalibrated-assumptions"
-                ),
-                "claim_eligibility": "exploratory-only",
-                "warning": "Proxy model; final claims require real Kubernetes measurements.",
-            }
-        },
+        environment={"simulation": simulation_environment},
         source="simulation",
     )
     validate_result_document(document, strict=True)
@@ -245,7 +268,14 @@ def _execute_run(
 ) -> Dict[str, Any]:
     jobs = run_scenario(n_jobs, load, seed)
     run_id = f"sim-{scenario}-{config_name}-r{repetition}"
-    results = _simulate_config(jobs, config_name, seed=seed, settings=settings)
+    captured_tail_plan: Dict[str, Any] = {}
+    results = _simulate_config(
+        jobs,
+        config_name,
+        seed=seed,
+        settings=settings,
+        on_tail_plan=captured_tail_plan.update,
+    )
     document = _result_document(
         results,
         jobs=jobs,
@@ -255,6 +285,7 @@ def _execute_run(
         repetition=repetition,
         seed=seed,
         settings=settings,
+        tail_plan=captured_tail_plan or None,
     )
     _atomic_json(run_dir / f"{run_id}.json", document)
     return document
@@ -306,9 +337,9 @@ def main_comparison(
     settings = settings or SimulationSettings()
     settings.validate()
     output = Path(results_dir)
-    configs = ["default", "custom-baseline", "reversed"]
+    configs = ["default", "custom-baseline", "custom-tail-balanced", "reversed"]
     if include_adaptive:
-        configs.insert(2, "custom-adaptive")
+        configs.insert(3, "custom-adaptive")
     summary_rows: List[Dict[str, Any]] = []
     raw_rows: List[Dict[str, Any]] = []
     documents: Dict[str, Any] = {}
@@ -400,6 +431,7 @@ def _parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument("--cpu-threshold", type=float, default=0.85)
     parser.add_argument("--max-wait", type=float, default=6.0)
     parser.add_argument("--max-time", type=float, default=100000.0)
+    parser.add_argument("--tail-window", type=int, default=4)
     parser.add_argument("--calibration", type=Path)
     parser.add_argument("--require-calibration", action="store_true")
     parser.add_argument("--matrix-reference", type=float)
@@ -452,6 +484,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         cpu_threshold=args.cpu_threshold,
         max_wait=args.max_wait,
         max_time=args.max_time,
+        tail_window=args.tail_window,
         work_model=work_model,
     )
     settings.validate()

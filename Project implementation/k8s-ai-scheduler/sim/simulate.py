@@ -13,7 +13,7 @@ import os
 import random
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from k8s.work_model import (  # noqa: E402
@@ -23,6 +23,7 @@ from k8s.work_model import (  # noqa: E402
     estimate_work,
 )
 from scheduler.rank import JobFeatures, compute_ranks, sort_by_rank  # noqa: E402
+from scheduler.tail_balance import balance_training_tail  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -291,8 +292,21 @@ def run_paced(
     alpha: float = 0.05,
     max_time: float = 100000.0,
     work_model: TrainerWorkModel = DEFAULT_WORK_MODEL,
+    balance_tail: bool = False,
+    tail_window: int = 4,
+    on_tail_plan: Optional[Callable[[Mapping[str, Any]], None]] = None,
 ) -> List[SimResult]:
-    """Launch rank-ordered jobs using fixed or contention-feedback pacing."""
+    """Launch rank-ordered jobs using fixed or contention-feedback pacing.
+
+    ``balance_tail`` reuses the production :func:`balance_training_tail` policy
+    to reorder only the low-priority tail of the ranked burst so the longest
+    Jobs no longer start last.  The high-priority prefix is frozen, so mean JCT
+    is preserved while makespan and tail (p95) JCT improve.  It is disabled by
+    default and skipped for reversed ablations so ``custom-baseline`` and the
+    reversed control keep their exact article semantics.  When balancing runs,
+    ``on_tail_plan`` (if given) receives the balancer's evidence dict so callers
+    can persist an audit record of how the tail was reordered.
+    """
     _validate_simulation_inputs(jobs, n_cores=n_cores, dt=dt, alpha=alpha, max_time=max_time)
     if mode not in {"fixed", "adaptive"}:
         raise ValueError("mode must be 'fixed' or 'adaptive'")
@@ -306,9 +320,23 @@ def run_paced(
             raise ValueError(f"{name} must be finite and >= 0")
     if not 0 < cpu_threshold <= 1:
         raise ValueError("cpu_threshold must be in (0, 1]")
+    if not isinstance(tail_window, int) or isinstance(tail_window, bool) or tail_window < 2:
+        raise ValueError("tail_window must be an integer >= 2")
     work_model.validate()
 
     ordered = sort_by_rank(jobs, reverse_order=reverse)
+    if balance_tail and not reverse:
+        # Freeze the ``n_cores`` highest-priority Jobs (mean-JCT protection) and
+        # rebalance only the ranked tail for makespan, exactly as the gate
+        # controller does on its ``ranked_queue_prefill`` fast path.
+        ordered, tail_plan = balance_training_tail(
+            ordered,
+            parallelism=n_cores,
+            protected_prefix=n_cores,
+            window=tail_window,
+        )
+        if on_tail_plan is not None:
+            on_tail_plan(tail_plan)
     queue = [job.job_id for job in ordered]
     remaining = {job.job_id: estimate_trainer_work(job, work_model) for job in ordered}
     submission_t = {job.job_id: 0.0 for job in ordered}

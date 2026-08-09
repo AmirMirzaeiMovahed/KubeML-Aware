@@ -15,73 +15,24 @@ and unavailable/stale metrics all keep the conservative ranked path.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from itertools import permutations
 from typing import Any, Callable, Optional, Sequence
 
 from scheduler.kube import parse_cpu_quantity
 from scheduler.pacing import FeedbackUnavailable, MetricsSample
 from scheduler.rank import JobFeatures, WorkloadFeatures
 
+# ``balance_training_tail`` is a pure, Kubernetes-free helper.  It now lives in
+# :mod:`scheduler.tail_balance` so the offline simulator can reuse the exact
+# same validated implementation without importing the Kubernetes client.  It is
+# re-exported here to preserve the existing ``scheduler.fast_path`` API.
+from scheduler.tail_balance import (  # noqa: F401
+    _predicted_schedule,
+    balance_training_tail,
+)
+
 
 class FastPathResourceError(ValueError):
     """Raised when Pod CPU demand cannot be bounded safely."""
-
-
-def _predicted_schedule(
-    jobs: Sequence[JobFeatures], parallelism: int
-) -> tuple[float, float]:
-    """Return predicted completion-time sum and makespan for list scheduling."""
-
-    lanes = [0.0] * parallelism
-    completion_sum = 0.0
-    for job in jobs:
-        lane = min(range(parallelism), key=lambda index: (lanes[index], index))
-        lanes[lane] += job.T
-        completion_sum += lanes[lane]
-    return completion_sum, max(lanes, default=0.0)
-
-
-def balance_training_tail(
-    jobs: Sequence[JobFeatures],
-    *,
-    parallelism: int,
-    protected_prefix: int,
-    window: int = 4,
-) -> tuple[list[JobFeatures], dict[str, object]]:
-    """Balance a small ranked tail without disturbing its priority prefix."""
-
-    ordered = list(jobs)
-    if parallelism < 2 or protected_prefix < 1 or window < 2:
-        return ordered, {"selected": False, "reason": "not_applicable"}
-    tail_size = min(window, len(ordered) - protected_prefix)
-    if tail_size < 2:
-        return ordered, {"selected": False, "reason": "tail_too_small"}
-    prefix = ordered[:-tail_size]
-    original_tail = ordered[-tail_size:]
-    before_sum, before_makespan = _predicted_schedule(ordered, parallelism)
-    candidates = ([*prefix, *candidate] for candidate in permutations(original_tail))
-    balanced = min(
-        candidates,
-        key=lambda candidate: (
-            _predicted_schedule(candidate, parallelism)[1],
-            _predicted_schedule(candidate, parallelism)[0],
-            tuple(job.job_id for job in candidate[-tail_size:]),
-        ),
-    )
-    after_sum, after_makespan = _predicted_schedule(balanced, parallelism)
-    changed = [job.job_id for job in balanced] != [job.job_id for job in ordered]
-    return balanced, {
-        "selected": changed,
-        "reason": "balanced" if changed else "already_balanced",
-        "parallelism": parallelism,
-        "protected_prefix": len(prefix),
-        "original_tail": [job.job_id for job in original_tail],
-        "balanced_tail": [job.job_id for job in balanced[-tail_size:]],
-        "predicted_completion_sum_before": before_sum,
-        "predicted_completion_sum_after": after_sum,
-        "predicted_makespan_before": before_makespan,
-        "predicted_makespan_after": after_makespan,
-    }
 
 
 @dataclass(frozen=True)
