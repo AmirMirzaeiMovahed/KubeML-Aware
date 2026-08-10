@@ -29,6 +29,7 @@ ml-collect = "results.metrics_collector:main"
 ml-calibrate-trainer = "sim.calibration:main"
 ml-validate-manifests = "scripts.validate_manifests:main"
 ml-profile-inference = "profiling.cli:main"
+ml-audit-pilot = "scripts.analyze_pilot_structure:main"
 
 [project.optional-dependencies]
 test = [

@@ -1,0 +1,31 @@
+{
+  "evidence": {
+    "jobs_per_repetition": 12,
+    "performance_claim": false,
+    "repetitions": 5,
+    "source": "archived real-cluster manifests and gate-controller records"
+  },
+  "fast_path": {
+    "allocatable_cpu_cores": 4.0,
+    "burst_cpu_demand_cores": 12.0,
+    "cpu_threshold": 0.85,
+    "mean_current_cpu_utilization": 0.30424873245,
+    "mean_projected_cpu_utilization": 3.30424873245,
+    "reasons": {
+      "ranked_queue_prefill": 5
+    },
+    "tail_balance_selected_repetitions": 5
+  },
+  "kind": "kubeml-pilot-structural-diagnostics",
+  "schema_version": "1.0",
+  "six_feature_vs_duration_only": {
+    "exact_order_matches": 0,
+    "interpretation": "Structural comparison only. It quantifies policy overlap but does not measure the duration-only policy on the cluster.",
+    "mean_absolute_position_shift": 0.9,
+    "mean_jobs_with_changed_position": 6.8,
+    "mean_kendall_tau_b": 0.8181818181818181,
+    "mean_score_pearson": 0.9443611172496867,
+    "mean_spearman_rho": 0.9216783216783216,
+    "mean_top3_overlap": 2.6
+  }
+}

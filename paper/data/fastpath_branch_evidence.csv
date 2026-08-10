@@ -1,0 +1,6 @@
+repetition,selected,reason,cpu_threshold,current_cpu_utilization,burst_cpu_demand_cores,allocatable_cpu_cores,projected_cpu_utilization,headroom_release_count,initial_release_count,tail_balance_selected,tail_parallelism,protected_prefix,predicted_tail_makespan_before,predicted_tail_makespan_after
+0,True,ranked_queue_prefill,0.85,0.30014195075,12.0,4.0,3.30014195075,2,12,True,2,8,82.753812,72.798839
+1,True,ranked_queue_prefill,0.85,0.31157879375,12.0,4.0,3.31157879375,2,12,True,2,8,79.637734,70.910829
+2,True,ranked_queue_prefill,0.85,0.28428323275,12.0,4.0,3.28428323275,2,12,True,2,8,78.99601200000001,73.035175
+3,True,ranked_queue_prefill,0.85,0.29833332075,12.0,4.0,3.29833332075,2,12,True,2,8,78.430294,72.440653
+4,True,ranked_queue_prefill,0.85,0.32690636425,12.0,4.0,3.32690636425,2,12,True,2,8,65.15123,63.357954
