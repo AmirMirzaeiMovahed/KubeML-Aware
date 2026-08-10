@@ -137,10 +137,22 @@ def test_registered_plan_has_exact_70_and_optional_90_runs():
 
 def test_paired_configs_materialize_identical_workload_features(tmp_path: Path):
     specs = expand_plan(DEFAULT_PLAN)
-    default = next(run for run in specs if run.group == "pacing" and run.repetition == 0 and run.config == "default")
-    custom = next(run for run in specs if run.group == "pacing" and run.repetition == 0 and run.config == "custom-baseline")
+    default = next(
+        run
+        for run in specs
+        if run.group == "pacing" and run.repetition == 0 and run.config == "default"
+    )
+    custom = next(
+        run
+        for run in specs
+        if run.group == "pacing"
+        and run.repetition == 0
+        and run.config == "custom-baseline"
+    )
     assert (default.scenario, default.repetition, default.seed) == (
-        custom.scenario, custom.repetition, custom.seed,
+        custom.scenario,
+        custom.repetition,
+        custom.seed,
     )
     materialize_run(
         default,
@@ -157,8 +169,13 @@ def test_paired_configs_materialize_identical_workload_features(tmp_path: Path):
         overwrite=False,
     )
     import json
-    first = json.loads((tmp_path / default.run_id / "jobs.json").read_text(encoding="utf-8"))
-    second = json.loads((tmp_path / custom.run_id / "jobs.json").read_text(encoding="utf-8"))
+
+    first = json.loads(
+        (tmp_path / default.run_id / "jobs.json").read_text(encoding="utf-8")
+    )
+    second = json.loads(
+        (tmp_path / custom.run_id / "jobs.json").read_text(encoding="utf-8")
+    )
     assert first["jobs"] == second["jobs"]
 
 
@@ -228,14 +245,16 @@ def test_article_effects_use_correct_paired_references_and_confidence_intervals(
             ("custom-baseline", intended),
             ("reversed", reversed_jct),
         ):
-            rows.append({
-                "scenario": "48-normal",
-                "config": config,
-                "rep": repetition,
-                "seed": 2000 + repetition,
-                "avg_jct": avg_jct,
-                "makespan": avg_jct * 2,
-            })
+            rows.append(
+                {
+                    "scenario": "48-normal",
+                    "config": config,
+                    "rep": repetition,
+                    "seed": 2000 + repetition,
+                    "avg_jct": avg_jct,
+                    "makespan": avg_jct * 2,
+                }
+            )
     paired = paired_effect_table(pd.DataFrame(rows)).set_index("config")
     assert len(paired) == 2
     improvement = paired.loc["custom-baseline"]
@@ -257,11 +276,34 @@ def test_article_effects_use_correct_paired_references_and_confidence_intervals(
 
 
 def test_paired_effects_reject_missing_reference_pair():
-    summary = pd.DataFrame([
-        {"scenario": "12-normal", "config": "default", "rep": 0, "seed": 1, "avg_jct": 10, "makespan": 12},
-        {"scenario": "12-normal", "config": "custom-baseline", "rep": 0, "seed": 1, "avg_jct": 8, "makespan": 10},
-        {"scenario": "12-normal", "config": "reversed", "rep": 1, "seed": 2, "avg_jct": 9, "makespan": 11},
-    ])
+    summary = pd.DataFrame(
+        [
+            {
+                "scenario": "12-normal",
+                "config": "default",
+                "rep": 0,
+                "seed": 1,
+                "avg_jct": 10,
+                "makespan": 12,
+            },
+            {
+                "scenario": "12-normal",
+                "config": "custom-baseline",
+                "rep": 0,
+                "seed": 1,
+                "avg_jct": 8,
+                "makespan": 10,
+            },
+            {
+                "scenario": "12-normal",
+                "config": "reversed",
+                "rep": 1,
+                "seed": 2,
+                "avg_jct": 9,
+                "makespan": 11,
+            },
+        ]
+    )
     with pytest.raises(ValueError, match="unpaired runs"):
         paired_effect_table(summary)
 
@@ -276,35 +318,37 @@ def test_published_article_reference_preserves_table_and_ablation_semantics():
     }
     assert table["custom-baseline"]["metrics"]["avg_jct"] == 165.79
 
-    summary = pd.DataFrame([
-        {
-            "scenario": "12-normal",
-            "config": "default",
-            "avg_jct": 234.0,
-            "tail_jct_p95": 438.0,
-            "max_jct": 451.0,
-            "min_jct": 16.0,
-            "makespan": 451.0,
-        },
-        {
-            "scenario": "12-normal",
-            "config": "custom-baseline",
-            "avg_jct": 178.0,
-            "tail_jct_p95": 401.0,
-            "max_jct": 412.0,
-            "min_jct": 7.0,
-            "makespan": 412.0,
-        },
-        {
-            "scenario": "12-normal",
-            "config": "reversed",
-            "avg_jct": 178.0 * 1.49,
-            "tail_jct_p95": 450.0,
-            "max_jct": 470.0,
-            "min_jct": 10.0,
-            "makespan": 500.0,
-        },
-    ])
+    summary = pd.DataFrame(
+        [
+            {
+                "scenario": "12-normal",
+                "config": "default",
+                "avg_jct": 234.0,
+                "tail_jct_p95": 438.0,
+                "max_jct": 451.0,
+                "min_jct": 16.0,
+                "makespan": 451.0,
+            },
+            {
+                "scenario": "12-normal",
+                "config": "custom-baseline",
+                "avg_jct": 178.0,
+                "tail_jct_p95": 401.0,
+                "max_jct": 412.0,
+                "min_jct": 7.0,
+                "makespan": 412.0,
+            },
+            {
+                "scenario": "12-normal",
+                "config": "reversed",
+                "avg_jct": 178.0 * 1.49,
+                "tail_jct_p95": 450.0,
+                "max_jct": 470.0,
+                "min_jct": 10.0,
+                "makespan": 500.0,
+            },
+        ]
+    )
     comparison = compare_article_reference(summary, reference)
     degradation = comparison[
         (comparison.row_type == "published_effect")
@@ -325,24 +369,26 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
         for index in range(spec.jobs):
             start = index * 0.01
             end = start + 1.0
-            jobs.append({
-                "job_id": f"job-{index}",
-                "category": "test",
-                "features": {"T": 1, "R": 1, "M": 1, "G": 1, "C": 1, "P": 1},
-                "rank": 0.625,
-                "submission_time": 0.0,
-                "execution_start_time": start,
-                "completion_time": end,
-                "jct_s": end,
-                "status": "completed",
-                "node_name": "node-a",
-                "error": None,
-                "trainer_evidence": {
-                    "work_model_version": WORK_MODEL_VERSION,
-                    "blas_threads": 1,
-                    "blas_library_count": 1,
-                },
-            })
+            jobs.append(
+                {
+                    "job_id": f"job-{index}",
+                    "category": "test",
+                    "features": {"T": 1, "R": 1, "M": 1, "G": 1, "C": 1, "P": 1},
+                    "rank": 0.5,
+                    "submission_time": 0.0,
+                    "execution_start_time": start,
+                    "completion_time": end,
+                    "jct_s": end,
+                    "status": "completed",
+                    "node_name": "node-a",
+                    "error": None,
+                    "trainer_evidence": {
+                        "work_model_version": WORK_MODEL_VERSION,
+                        "blas_threads": 1,
+                        "blas_library_count": 1,
+                    },
+                }
+            )
         submission = {
             "schema_version": "1.0",
             "mode": "concurrent-client-barrier",
@@ -383,7 +429,7 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
             jobs=jobs,
             source="kubernetes",
             environment={
-                    "orchestration": {
+                "orchestration": {
                     "plan_sha256": plan_hash,
                     "target_node": "node-a",
                     "trainer_image": TRAINER_IMAGE,
@@ -391,45 +437,43 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                     "scheduler_deployment": "scheduler",
                     "artifact_sha256": {
                         "jobs.json": "b" * 64,
-                        **{
-                            f"pods/{job['job_id']}.yaml": "c" * 64
-                            for job in jobs
-                        },
+                        **{f"pods/{job['job_id']}.yaml": "c" * 64 for job in jobs},
                     },
-                        "cluster_snapshot_sha256": _canonical_sha256(cluster_snapshot),
-                        "submission_sha256": _canonical_sha256(submission),
-                    },
-                "cluster_snapshot": cluster_snapshot,
-                    "kubernetes": {
-                    "workload_pods": [
-                        {"name": job["job_id"], "node_name": "node-a"}
-                        for job in jobs
-                        ]
-                    },
-                    "submission": submission,
+                    "cluster_snapshot_sha256": _canonical_sha256(cluster_snapshot),
+                    "submission_sha256": _canonical_sha256(submission),
                 },
+                "cluster_snapshot": cluster_snapshot,
+                "kubernetes": {
+                    "workload_pods": [
+                        {"name": job["job_id"], "node_name": "node-a"} for job in jobs
+                    ]
+                },
+                "submission": submission,
+            },
         )
         if spec.scheduler_name != "default-scheduler":
             events = []
             for index, job in enumerate(jobs[:-1]):
                 started = 100.0 + index * 10
-                events.extend([
-                    {
-                        "event": "pacing_wait_started",
-                        "after_job_id": job["job_id"],
-                        "before_job_id": jobs[index + 1]["job_id"],
-                        "mode": spec.pacing_mode,
-                        "fixed_delay_seconds": spec.fixed_delay_seconds,
-                        "timestamp": started,
-                    },
-                    {
-                        "event": "pacing_wait_completed",
-                        "after_job_id": job["job_id"],
-                        "before_job_id": jobs[index + 1]["job_id"],
-                        "mode": spec.pacing_mode,
-                        "timestamp": started + spec.fixed_delay_seconds,
-                    },
-                ])
+                events.extend(
+                    [
+                        {
+                            "event": "pacing_wait_started",
+                            "after_job_id": job["job_id"],
+                            "before_job_id": jobs[index + 1]["job_id"],
+                            "mode": spec.pacing_mode,
+                            "fixed_delay_seconds": spec.fixed_delay_seconds,
+                            "timestamp": started,
+                        },
+                        {
+                            "event": "pacing_wait_completed",
+                            "after_job_id": job["job_id"],
+                            "before_job_id": jobs[index + 1]["job_id"],
+                            "mode": spec.pacing_mode,
+                            "timestamp": started + spec.fixed_delay_seconds,
+                        },
+                    ]
+                )
             document["scheduler_record"] = {
                 "schema_version": 3,
                 "status": "completed",
@@ -446,9 +490,9 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                     **_runtime_metadata(),
                 },
                 "records": [
-                        {
-                            "job_id": job["job_id"],
-                            "pod_uid": f"uid-{index}",
+                    {
+                        "job_id": job["job_id"],
+                        "pod_uid": f"uid-{index}",
                         "order": index + 1,
                         "rank": job["rank"],
                         "status": "execution_started",
@@ -461,7 +505,9 @@ def test_complete_70_run_documents_analyze_end_to_end(tmp_path: Path):
                 ],
                 "events": events,
             }
-        (runs / f"{spec.run_id}.json").write_text(json.dumps(document), encoding="utf-8")
+        (runs / f"{spec.run_id}.json").write_text(
+            json.dumps(document), encoding="utf-8"
+        )
     report = analyze(runs_dir=runs, output_dir=tmp_path / "analysis", make_plots=False)
     assert report["run_count"] == 70
     assert report["strictly_complete"] is True
@@ -508,19 +554,21 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
                 "helm": {"computed_values": {"scheduler": _scheduler_values()}}
             }
         },
-        jobs=[{
-            "job_id": "job-a",
-            "category": "test",
-            "features": {name: 1 for name in ("T", "R", "M", "G", "C", "P")},
-            "rank": 0.625,
-            "submission_time": 99.0,
-            "execution_start_time": 101.0,
-            "completion_time": 102.0,
-            "jct_s": 3.0,
-            "status": "completed",
-            "node_name": "node-a",
-            "error": None,
-        }],
+        jobs=[
+            {
+                "job_id": "job-a",
+                "category": "test",
+                "features": {name: 1 for name in ("T", "R", "M", "G", "C", "P")},
+                "rank": 0.5,
+                "submission_time": 99.0,
+                "execution_start_time": 101.0,
+                "completion_time": 102.0,
+                "jct_s": 3.0,
+                "status": "completed",
+                "node_name": "node-a",
+                "error": None,
+            }
+        ],
     )
     schedule = {
         "schema_version": 3,
@@ -537,17 +585,19 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
             "reverse": False,
             **_runtime_metadata(),
         },
-        "records": [{
-            "job_id": "job-a",
-            "pod_uid": "uid-job-a",
-            "order": 1,
-            "rank": 0.625,
-            "status": "execution_started",
-            "bind_time": 100.0,
-            "release_time": None,
-            "exec_start_time": 101.0,
-            "error": None,
-        }],
+        "records": [
+            {
+                "job_id": "job-a",
+                "pod_uid": "uid-job-a",
+                "order": 1,
+                "rank": 0.5,
+                "status": "execution_started",
+                "bind_time": 100.0,
+                "release_time": None,
+                "exec_start_time": 101.0,
+                "error": None,
+            }
+        ],
         "events": [],
     }
     validate_scheduler_record(spec, schedule, result, target_node="node-a")
@@ -559,19 +609,32 @@ def test_scheduler_evidence_is_validated_against_collected_jobs():
 def test_live_scheduler_arguments_must_match_computed_helm_values():
     values = _scheduler_values()
     arguments = [
-        "--scheduler-name", values["name"],
-        "--target-node", values["targetNode"],
-        "--results", values["resultsPath"],
-        "--quiet-period", str(values["quietPeriodSeconds"]),
-        "--burst-timeout", str(values["burstTimeoutSeconds"]),
-        "--poll-interval", str(values["pollIntervalSeconds"]),
-        "--execution-timeout", str(values["executionTimeoutSeconds"]),
-        "--api-timeout", str(values["apiTimeoutSeconds"]),
-        "--api-retries", str(values["apiRetries"]),
-        "--cpu-threshold", str(values["cpuThreshold"]),
-        "--adaptive-hysteresis", str(values["adaptiveHysteresis"]),
-        "--max-wait", str(values["maxWaitSeconds"]),
-        "--metrics-max-age", str(values["metricsMaxAgeSeconds"]),
+        "--scheduler-name",
+        values["name"],
+        "--target-node",
+        values["targetNode"],
+        "--results",
+        values["resultsPath"],
+        "--quiet-period",
+        str(values["quietPeriodSeconds"]),
+        "--burst-timeout",
+        str(values["burstTimeoutSeconds"]),
+        "--poll-interval",
+        str(values["pollIntervalSeconds"]),
+        "--execution-timeout",
+        str(values["executionTimeoutSeconds"]),
+        "--api-timeout",
+        str(values["apiTimeoutSeconds"]),
+        "--api-retries",
+        str(values["apiRetries"]),
+        "--cpu-threshold",
+        str(values["cpuThreshold"]),
+        "--adaptive-hysteresis",
+        str(values["adaptiveHysteresis"]),
+        "--max-wait",
+        str(values["maxWaitSeconds"]),
+        "--metrics-max-age",
+        str(values["metricsMaxAgeSeconds"]),
     ]
     validate_scheduler_argument_contract(
         arguments,
@@ -614,20 +677,24 @@ def test_resume_validation_rejects_result_from_different_plan():
         seed=spec.seed,
         expected_jobs=1,
         source="kubernetes",
-        environment={"orchestration": {"plan_sha256": "wrong", "target_node": "node-a"}},
-        jobs=[{
-            "job_id": "job-a",
-            "category": "test",
-            "features": {name: 1 for name in ("T", "R", "M", "G", "C", "P")},
-            "rank": 0.625,
-            "submission_time": 1.0,
-            "execution_start_time": 2.0,
-            "completion_time": 3.0,
-            "jct_s": 2.0,
-            "status": "completed",
-            "node_name": "node-a",
-            "error": None,
-        }],
+        environment={
+            "orchestration": {"plan_sha256": "wrong", "target_node": "node-a"}
+        },
+        jobs=[
+            {
+                "job_id": "job-a",
+                "category": "test",
+                "features": {name: 1 for name in ("T", "R", "M", "G", "C", "P")},
+                "rank": 0.5,
+                "submission_time": 1.0,
+                "execution_start_time": 2.0,
+                "completion_time": 3.0,
+                "jct_s": 2.0,
+                "status": "completed",
+                "node_name": "node-a",
+                "error": None,
+            }
+        ],
     )
     with pytest.raises(ClusterRunError, match="plan_sha256"):
         validate_result_for_spec(
@@ -641,17 +708,21 @@ def test_scheduler_failure_probe_aborts_before_workload_timeout():
     class FakeKubectl:
         def pod_json(self, namespace, selector):
             return {
-                "items": [{
-                    "metadata": {"uid": "scheduler-uid"},
-                    "status": {
-                        "phase": "Running",
-                        "containerStatuses": [{
-                            "name": "scheduler",
-                            "ready": True,
-                            "restartCount": 0,
-                        }],
-                    },
-                }]
+                "items": [
+                    {
+                        "metadata": {"uid": "scheduler-uid"},
+                        "status": {
+                            "phase": "Running",
+                            "containerStatuses": [
+                                {
+                                    "name": "scheduler",
+                                    "ready": True,
+                                    "restartCount": 0,
+                                }
+                            ],
+                        },
+                    }
+                ]
             }
 
         def run(self, *args, **kwargs):

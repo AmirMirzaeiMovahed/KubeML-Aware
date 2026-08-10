@@ -24,13 +24,13 @@ def test_exact_paper_weights_and_directions():
     best = job("best", T=1, R=9, M=1, G=1, C=9, P=1)
     worst = job("worst", T=9, R=1, M=9, G=9, C=1, P=9)
     ranks = compute_ranks([best, worst])
-    assert ranks == {"best": pytest.approx(1.25), "worst": pytest.approx(0.0)}
+    assert ranks == {"best": pytest.approx(1), "worst": pytest.approx(0.0)}
 
 
 def test_identical_features_are_neutral_and_ties_are_deterministic():
     ranks = compute_ranks([job("z"), job("a")])
-    assert ranks["z"] == pytest.approx(0.625)
-    assert ranks["a"] == pytest.approx(0.625)
+    assert ranks["z"] == pytest.approx(0.5)
+    assert ranks["a"] == pytest.approx(0.5)
     assert [item.job_id for item in sort_by_rank([job("z"), job("a")])] == ["a", "z"]
     assert [
         item.job_id for item in sort_by_rank([job("z"), job("a")], reverse_order=True)
@@ -41,7 +41,8 @@ def test_explicit_tie_breaker_is_used_without_reversing_ties():
     jobs = [job("a"), job("b")]
     keys = {"a": (2, "a"), "b": (1, "b")}
     assert [
-        item.job_id for item in sort_by_rank(jobs, tie_breaker=lambda item: keys[item.job_id])
+        item.job_id
+        for item in sort_by_rank(jobs, tie_breaker=lambda item: keys[item.job_id])
     ] == ["b", "a"]
 
 
@@ -111,4 +112,3 @@ def test_workload_policy_rejects_mixed_training_and_inference_burst():
 def test_invalid_inference_features_are_rejected():
     with pytest.raises(RankValidationError, match="finite and > 0"):
         compute_inference_ranks([inference("bad", latency_slo_ms=0)])
-

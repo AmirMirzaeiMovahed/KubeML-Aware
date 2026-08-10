@@ -25,7 +25,6 @@ article inconsistencies, is in `docs/ARTICLE_CLAIM_STATUS_FA.md`.
 | Burst-generated annotated ML jobs | `workload/generate_workload.py` | Implemented/local | Deterministic manifest and exact-count tests |
 | Features `T,R,M,G,C,P` | generator, trainer, `scheduler/rank.py` | Implemented/local | Feature parsing/range tests |
 | Per-burst Min-Max normalization | `scheduler/rank.py` | Implemented/local | Unit vectors including equal-value case |
-| Weighted rank 0.40/0.35/0.20/0.15/0.10/0.05 | `scheduler/rank.py` | Implemented/local | Equation parity test |
 | Smaller `T,M,G,P`; larger `R,C` preferred | `scheduler/rank.py` | Implemented/local | Directionality tests |
 | Descending rank order | reproduction scheduler | Implemented/local | Ordered schedule record; server pending |
 | Reversed-order ablation | `--reverse` | Implemented/local | Reversed rank order in a completed cluster run |

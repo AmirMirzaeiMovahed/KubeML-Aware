@@ -47,60 +47,64 @@ def _pod(name="light-000-12345678", phase="Succeeded"):
             scheduler_name="default-scheduler",
             scheduling_gates=[],
             image_pull_secrets=[SimpleNamespace(name="registry-credentials")],
-            containers=[SimpleNamespace(
-                name="train",
-                image="registry.example/ml-sim@sha256:" + "a" * 64,
-                env=[
-                    SimpleNamespace(
-                        name="JOB_ID",
-                        value=None,
-                        value_from=SimpleNamespace(
-                            field_ref=SimpleNamespace(field_path="metadata.name")
-                        ),
-                    ),
-                    SimpleNamespace(
-                        name="JOB_SEED",
-                        value=str(deterministic_job_seed(1, name)),
-                        value_from=None,
-                    ),
-                    SimpleNamespace(
-                        name="ML_WORK_MODEL_VERSION",
-                        value=WORK_MODEL_VERSION,
-                        value_from=None,
-                    ),
-                    SimpleNamespace(
-                        name="ML_NUM_THREADS",
-                        value="1",
-                        value_from=None,
-                    ),
-                    *[
+            containers=[
+                SimpleNamespace(
+                    name="train",
+                    image="registry.example/ml-sim@sha256:" + "a" * 64,
+                    env=[
                         SimpleNamespace(
-                            name=f"JOB_{feature}",
-                            value=annotations[key],
+                            name="JOB_ID",
+                            value=None,
+                            value_from=SimpleNamespace(
+                                field_ref=SimpleNamespace(field_path="metadata.name")
+                            ),
+                        ),
+                        SimpleNamespace(
+                            name="JOB_SEED",
+                            value=str(deterministic_job_seed(1, name)),
                             value_from=None,
-                        )
-                        for feature, key in {
-                            "T": "ml.scheduler/estimated-training-time",
-                            "R": "ml.scheduler/loss-reduction-rate",
-                            "M": "ml.scheduler/matrix-size",
-                            "G": "ml.scheduler/gradient-update-size",
-                            "C": "ml.scheduler/checkpoint-interval",
-                            "P": "ml.scheduler/model-partitions",
-                        }.items()
+                        ),
+                        SimpleNamespace(
+                            name="ML_WORK_MODEL_VERSION",
+                            value=WORK_MODEL_VERSION,
+                            value_from=None,
+                        ),
+                        SimpleNamespace(
+                            name="ML_NUM_THREADS",
+                            value="1",
+                            value_from=None,
+                        ),
+                        *[
+                            SimpleNamespace(
+                                name=f"JOB_{feature}",
+                                value=annotations[key],
+                                value_from=None,
+                            )
+                            for feature, key in {
+                                "T": "ml.scheduler/estimated-training-time",
+                                "R": "ml.scheduler/loss-reduction-rate",
+                                "M": "ml.scheduler/matrix-size",
+                                "G": "ml.scheduler/gradient-update-size",
+                                "C": "ml.scheduler/checkpoint-interval",
+                                "P": "ml.scheduler/model-partitions",
+                            }.items()
+                        ],
                     ],
-                ],
-            )],
+                )
+            ],
         ),
         status=SimpleNamespace(
             phase=phase,
             reason=None,
-            container_statuses=[SimpleNamespace(
-                name="train",
-                image="registry.example/ml-sim@sha256:" + "a" * 64,
-                image_id="containerd://registry.example/ml-sim@sha256:" + "b" * 64,
-                restart_count=0,
-                state=SimpleNamespace(terminated=None, waiting=None),
-            )],
+            container_statuses=[
+                SimpleNamespace(
+                    name="train",
+                    image="registry.example/ml-sim@sha256:" + "a" * 64,
+                    image_id="containerd://registry.example/ml-sim@sha256:" + "b" * 64,
+                    restart_count=0,
+                    state=SimpleNamespace(terminated=None, waiting=None),
+                )
+            ],
         ),
     )
 
@@ -132,24 +136,30 @@ def _success_logs(pod, *, started=101.0, completed=105.0):
         "blas_threads": 1,
         "blas_library_count": 1,
     }
-    return "\n".join([
-        json.dumps({
-            "event": "INITIALIZATION_COMPLETED",
-            "timestamp": started - 0.1,
-            "job_id": pod.metadata.name,
-            "work_model": estimate.to_dict(),
-            "blas_runtime": {
-                "expected_threads": 1,
-                "libraries": [{"user_api": "blas", "num_threads": 1}],
-            },
-        }),
-        json.dumps({
-            "event": "EXECUTION_STARTED",
-            "timestamp": started,
-            "job_id": pod.metadata.name,
-        }),
-        json.dumps(completion),
-    ])
+    return "\n".join(
+        [
+            json.dumps(
+                {
+                    "event": "INITIALIZATION_COMPLETED",
+                    "timestamp": started - 0.1,
+                    "job_id": pod.metadata.name,
+                    "work_model": estimate.to_dict(),
+                    "blas_runtime": {
+                        "expected_threads": 1,
+                        "libraries": [{"user_api": "blas", "num_threads": 1}],
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "event": "EXECUTION_STARTED",
+                    "timestamp": started,
+                    "job_id": pod.metadata.name,
+                }
+            ),
+            json.dumps(completion),
+        ]
+    )
 
 
 class FakeCoreApi:
@@ -172,10 +182,14 @@ def test_standard_linear_p95():
 
 
 def test_structured_and_legacy_markers_are_parsed():
-    logs = "\n".join([
-        json.dumps({"event": "EXECUTION_STARTED", "timestamp": 101.0, "job_id": "a"}),
-        "[105.500000] EXECUTION_COMPLETED steps=2",
-    ])
+    logs = "\n".join(
+        [
+            json.dumps(
+                {"event": "EXECUTION_STARTED", "timestamp": 101.0, "job_id": "a"}
+            ),
+            "[105.500000] EXECUTION_COMPLETED steps=2",
+        ]
+    )
     events = parse_log_events(logs)
     assert events["EXECUTION_STARTED"]["timestamp"] == 101.0
     assert events["EXECUTION_COMPLETED"]["timestamp"] == 105.5
@@ -198,8 +212,11 @@ def test_strict_collection_returns_common_schema():
     )
     assert document["run"]["status"] == "completed"
     assert document["summary"]["avg_jct"] == 5.0
-    assert document["jobs"][0]["rank"] == pytest.approx(0.625)
-    assert document["jobs"][0]["trainer_evidence"]["work_model_version"] == WORK_MODEL_VERSION
+    assert document["jobs"][0]["rank"] == pytest.approx(0.5)
+    assert (
+        document["jobs"][0]["trainer_evidence"]["work_model_version"]
+        == WORK_MODEL_VERSION
+    )
 
 
 def test_strict_collection_validates_full_pod_contract():

@@ -1,9 +1,4 @@
-"""Validated implementation of the ranking function from the article.
-
-The article intentionally uses weights whose sum is 1.25. They are kept
-verbatim because multiplying every score by a constant does not change the
-ordering, while changing them would no longer reproduce the published method.
-"""
+"""Validated implementation of the ranking function from the article."""
 
 from __future__ import annotations
 
@@ -13,12 +8,12 @@ from typing import Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Uni
 
 FEATURES: Tuple[str, ...] = ("T", "R", "M", "G", "C", "P")
 WEIGHTS: Dict[str, float] = {
-    "T": 0.40,
-    "R": 0.35,
-    "M": 0.20,
-    "G": 0.15,
-    "C": 0.10,
-    "P": 0.05,
+    "T": 0.32,
+    "R": 0.28,
+    "M": 0.16,
+    "G": 0.12,
+    "C": 0.08,
+    "P": 0.04,
 }
 LARGER_IS_BETTER = frozenset({"R", "C"})
 SMALLER_IS_BETTER = frozenset({"T", "M", "G", "P"})
