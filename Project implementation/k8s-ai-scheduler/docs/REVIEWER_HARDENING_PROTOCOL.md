@@ -9,6 +9,7 @@ complete and validated.
 
 | Arm | Rank | FastPath | Tail | Purpose |
 |---|---|---:|---:|---|
+| `native-default` | none | off | off | ungated Kubernetes default-scheduler baseline |
 | `baseline` | FIFO | off | off | synchronized Kubernetes baseline |
 | `duration-only` | T only | on | off | SPT/weighted-SJF baseline |
 | `kubeml` | six features | on | on | deployed policy |
@@ -31,11 +32,12 @@ python scripts/run_training_fastpath_pilot.py \
   --output-root /root/kubeml-reviewer-matrix
 ```
 
-The registered matrix is 30 repetitions × 6 arms = 180 completed bursts. The
+The protocol was amended before execution to add the ungated `native-default`
+arm. The registered matrix is 30 repetitions × 7 arms = 210 completed bursts. The
 driver deterministically shuffles arm order inside every repetition, reuses the
 same workload seed across arms, waits for the node to cool, and aborts if a
 protected service becomes unhealthy. Based on the archived five-pair pilot,
-budget roughly 4–6 hours on the same class of node; this is an operational
+budget roughly 5–7 hours on the same class of node; this is an operational
 estimate, not a measured outcome for the new matrix.
 
 ## Current evidence boundary

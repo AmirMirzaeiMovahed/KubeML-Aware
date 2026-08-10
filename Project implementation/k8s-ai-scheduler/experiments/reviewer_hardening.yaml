@@ -2,6 +2,10 @@ schema_version: "1.0"
 kind: kubeml-reviewer-hardening-protocol
 status: registered-not-executed
 registered_at: "2026-08-10"
+amended_at: "2026-08-10"
+amendment: >-
+  Added an ungated Kubernetes default-scheduler arm before execution so the
+  synchronized FIFO launch barrier is not the only baseline.
 description: >-
   Prospective real-cluster matrix that separates the six-feature ordering,
   duration-only baseline, FastPath, tail balancing, and reversed ordering.
@@ -18,6 +22,12 @@ workload:
   synchronized_launch_barrier: true
 
 arms:
+  - name: native-default
+    policy: kubernetes-default-ungated
+    rank_policy: none
+    fast_path: false
+    tail_balance: false
+    reverse: false
   - name: baseline
     policy: synchronized-fifo
     rank_policy: none
@@ -82,6 +92,7 @@ outcomes:
     - repetition
     - seed
   interpretation:
+    end_to_end_value: compare kubeml with native-default
     six_feature_value: compare kubeml with duration-only
     fastpath_value: compare six-feature-no-tail with six-feature-no-fastpath
     tail_value: compare kubeml with six-feature-no-tail

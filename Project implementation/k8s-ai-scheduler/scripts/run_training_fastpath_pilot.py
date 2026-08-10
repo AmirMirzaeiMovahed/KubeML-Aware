@@ -62,6 +62,13 @@ ARM_LABEL = "pilot.kubeml/arm"
 JOB_LABEL = "pilot.kubeml/job-index"
 
 ARM_SETTINGS: dict[str, dict[str, Any]] = {
+    "native-default": {
+        "code": "u",
+        "rank_policy": "none",
+        "tail_balance": False,
+        "fast_path": False,
+        "reverse": False,
+    },
     "baseline": {
         "code": "b",
         "rank_policy": "six_feature",
@@ -105,6 +112,14 @@ ARM_SETTINGS: dict[str, dict[str, Any]] = {
         "reverse": True,
     },
 }
+
+UNCONTROLLED_ARMS = frozenset({"native-default", "baseline"})
+
+
+def arm_namespace(arm: str) -> str:
+    """Keep unmanaged baselines away from the gate controller namespace."""
+
+    return BASELINE_NAMESPACE if arm in UNCONTROLLED_ARMS else CUSTOM_NAMESPACE
 
 
 def kubectl(
@@ -217,7 +232,7 @@ def pod_manifest(
     expected_jobs: int,
 ) -> dict[str, Any]:
     arm_settings = ARM_SETTINGS[arm]
-    namespace = CUSTOM_NAMESPACE if arm == "kubeml" else BASELINE_NAMESPACE
+    namespace = arm_namespace(arm)
     name = f"tfp-{arm[0]}-r{repetition}-{index:02d}"
     labels = {
         PILOT_LABEL: run_id,
@@ -287,11 +302,12 @@ def pod_manifest(
             }
         ],
     }
-    # Both arms use the same launch barrier so sequential Kubernetes API
-    # creation time cannot give the unranked baseline an early-start bonus.
-    # The baseline harness removes only this barrier in manifest/FIFO order;
-    # default-scheduler still performs all feasibility, scoring and binding.
-    spec["schedulingGates"] = [{"name": RELEASE_GATE}]
+    if arm != "native-default":
+        # Controlled arms use a gate so the production controller can enforce
+        # their declared policy. The synchronized FIFO baseline uses the same
+        # primitive, but the harness removes it in manifest order. The native
+        # Kubernetes arm intentionally has no gate at all.
+        spec["schedulingGates"] = [{"name": RELEASE_GATE}]
     return {
         "apiVersion": "v1",
         "kind": "Pod",
@@ -492,7 +508,7 @@ def execute_arm(
     jobs_per_run: int,
     workload_profile: str,
 ) -> dict[str, Any]:
-    namespace = CUSTOM_NAMESPACE if arm == "kubeml" else BASELINE_NAMESPACE
+    namespace = arm_namespace(arm)
     run_id = f"tfp-{ARM_SETTINGS[arm]['code']}-r{repetition}-{int(time.time())}"
     if workload_profile == "heavy":
         jobs = generate_category_burst(
@@ -557,7 +573,7 @@ def execute_arm(
             }
             for job in jobs
         ]
-        if arm != "baseline":
+        if arm not in UNCONTROLLED_ARMS:
             gate_text = kubectl(
                 "-n",
                 CUSTOM_NAMESPACE,
@@ -592,13 +608,16 @@ def aggregate(runs: list[dict[str, Any]], repetitions: int, arms: list[str]) -> 
             for metric in metric_names
         }
     paired: list[dict[str, Any]] = []
+    reference_arm = "native-default" if "native-default" in arms else "baseline"
     for repetition in range(repetitions):
         baseline = next(
-            run for run in runs if run["arm"] == "baseline" and run["repetition"] == repetition
+            run
+            for run in runs
+            if run["arm"] == reference_arm and run["repetition"] == repetition
         )
         row: dict[str, Any] = {"repetition": repetition}
         for arm in arms:
-            if arm == "baseline":
+            if arm == reference_arm:
                 continue
             candidate = next(
                 run for run in runs if run["arm"] == arm and run["repetition"] == repetition
@@ -611,6 +630,7 @@ def aggregate(runs: list[dict[str, Any]], repetitions: int, arms: list[str]) -> 
                 )
         paired.append(row)
     report: dict[str, Any] = {
+        "reference_arm": reference_arm,
         "means": means,
         "paired": paired,
     }
@@ -620,9 +640,37 @@ def aggregate(runs: list[dict[str, Any]], repetitions: int, arms: list[str]) -> 
             for metric in ("avg_jct_seconds", "p95_jct_seconds", "makespan_seconds")
         }
         for arm in arms
-        if arm != "baseline"
+        if arm != reference_arm
     }
     return report
+
+
+def write_json_atomic(path: Path, document: object) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def resume_runs(output: Path, expected_config: dict[str, Any]) -> list[dict[str, Any]]:
+    config_path = output / "run-config.json"
+    if not config_path.is_file():
+        raise RuntimeError(f"resume directory has no run-config.json: {output}")
+    actual_config = json.loads(config_path.read_text(encoding="utf-8"))
+    if actual_config != expected_config:
+        raise RuntimeError(
+            "resume configuration does not match the original run: "
+            f"expected={expected_config!r}, actual={actual_config!r}"
+        )
+    partial_path = output / "runs.partial.json"
+    if not partial_path.is_file():
+        return []
+    runs = json.loads(partial_path.read_text(encoding="utf-8"))
+    if not isinstance(runs, list):
+        raise RuntimeError("runs.partial.json must contain a JSON list")
+    keys = [(run.get("repetition"), run.get("arm")) for run in runs]
+    if len(keys) != len(set(keys)):
+        raise RuntimeError("runs.partial.json contains duplicate repetition/arm pairs")
+    return runs
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -634,13 +682,13 @@ def main(argv: list[str] | None = None) -> int:
         choices=tuple(ARM_SETTINGS),
         default=["baseline", "kubeml"],
         help=(
-            "registered paired arms; use all six arms for the reviewer-hardening ablation matrix"
+            "registered paired arms; use --reviewer-matrix for the complete causal matrix"
         ),
     )
     parser.add_argument(
         "--reviewer-matrix",
         action="store_true",
-        help="run the predeclared 30-block, six-arm reviewer-hardening matrix",
+        help="run the predeclared 30-block, seven-arm reviewer-hardening matrix",
     )
     parser.add_argument("--image", default="registry.local/kubeml/ml-sim-job:0.3.0")
     parser.add_argument("--cpu", default="1")
@@ -651,6 +699,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--output-root", type=Path, default=Path("/root/kubeml-fastpath-030/benchmarks")
     )
+    parser.add_argument(
+        "--resume-run",
+        type=Path,
+        default=None,
+        help="resume an interrupted run directory after verifying its immutable configuration",
+    )
     args = parser.parse_args(argv)
     if args.reviewer_matrix:
         args.repetitions = 30
@@ -660,20 +714,44 @@ def main(argv: list[str] | None = None) -> int:
     if args.jobs <= 1:
         parser.error("--jobs must be > 1")
     arms = list(dict.fromkeys(args.arms))
-    if "baseline" not in arms or len(arms) < 2:
-        parser.error("--arms must include baseline and at least one comparison arm")
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    output = args.output_root / stamp
-    output.mkdir(parents=True, exist_ok=False)
+    if not UNCONTROLLED_ARMS.intersection(arms) or len(arms) < 2:
+        parser.error(
+            "--arms must include native-default or baseline and at least one comparison arm"
+        )
+    run_config = {
+        "schema_version": "1.0",
+        "repetitions": args.repetitions,
+        "arms": arms,
+        "image": args.image,
+        "cpu": args.cpu,
+        "jobs": args.jobs,
+        "workload_profile": args.workload_profile,
+        "cooldown_cpu_percent": args.cooldown_cpu_percent,
+        "arm_order_seed": "20260810 + repetition",
+    }
+    if args.resume_run is None:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        output = args.output_root / stamp
+        output.mkdir(parents=True, exist_ok=False)
+        write_json_atomic(output / "run-config.json", run_config)
+        runs: list[dict[str, Any]] = []
+    else:
+        output = args.resume_run.resolve()
+        if not output.is_dir():
+            parser.error(f"--resume-run is not a directory: {output}")
+        runs = resume_runs(output, run_config)
     ensure_baseline_namespace()
     initial_services = service_snapshot()
     assert_services_ready(initial_services)
-    runs: list[dict[str, Any]] = []
+    completed = {(run["repetition"], run["arm"]) for run in runs}
     try:
         for repetition in range(args.repetitions):
             order = arms.copy()
             random.Random(20260810 + repetition).shuffle(order)
             for arm in order:
+                if (repetition, arm) in completed:
+                    print(f"RESUME repetition={repetition} arm={arm}", flush=True)
+                    continue
                 runs.append(
                     execute_arm(
                         arm=arm,
@@ -687,9 +765,8 @@ def main(argv: list[str] | None = None) -> int:
                         workload_profile=args.workload_profile,
                     )
                 )
-                (output / "runs.partial.json").write_text(
-                    json.dumps(runs, indent=2) + "\n", encoding="utf-8"
-                )
+                write_json_atomic(output / "runs.partial.json", runs)
+                completed.add((repetition, arm))
                 time.sleep(5)
         final_services = service_snapshot()
         assert_services_ready(final_services)
@@ -709,10 +786,15 @@ def main(argv: list[str] | None = None) -> int:
                 "seed_base": 8100,
                 "cpu_request_and_limit": args.cpu,
                 "image": args.image,
-                "baseline": (
-                    "Kubernetes default-scheduler with a synchronized FIFO "
-                    "launch barrier; no custom ranking or binding"
-                ),
+                "baselines": {
+                    "native-default": (
+                        "unmodified Kubernetes default-scheduler burst with no scheduling gate"
+                    ),
+                    "baseline": (
+                        "Kubernetes default-scheduler with a synchronized FIFO launch barrier; "
+                        "no custom ranking or binding"
+                    ),
+                },
             },
             "arms": {arm: ARM_SETTINGS[arm] for arm in arms},
             "arm_order": "deterministic per-repetition shuffle; seed 20260810 + repetition",
@@ -723,12 +805,15 @@ def main(argv: list[str] | None = None) -> int:
             "aggregate": aggregate(runs, args.repetitions, arms),
         }
         result_path = output / "paired-training-results.json"
-        result_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        write_json_atomic(result_path, report)
         print(f"RESULT={result_path}", flush=True)
         print(json.dumps(report["aggregate"], indent=2), flush=True)
         return 0
     except Exception as exc:  # noqa: BLE001 - preserve pilot failure evidence
-        (output / "failure.txt").write_text(repr(exc) + "\n", encoding="utf-8")
+        failure_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        (output / f"failure-{failure_stamp}.txt").write_text(
+            repr(exc) + "\n", encoding="utf-8"
+        )
         print(f"FAILED output={output}: {exc}", file=sys.stderr, flush=True)
         return 1
 
