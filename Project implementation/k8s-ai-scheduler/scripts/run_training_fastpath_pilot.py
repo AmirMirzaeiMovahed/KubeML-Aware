@@ -20,6 +20,7 @@ import time
 from datetime import datetime, timezone
 from itertools import pairwise
 from pathlib import Path
+from statistics import median
 from typing import Any, Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -167,9 +168,9 @@ def ensure_baseline_namespace() -> None:
     kubectl("apply", "-f", "-", input_document=manifest)
 
 
-def service_snapshot() -> dict[str, list[dict[str, Any]]]:
+def service_snapshot(namespaces: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
     result: dict[str, list[dict[str, Any]]] = {}
-    for namespace in ("parapolu", "vpn"):
+    for namespace in namespaces:
         payload = json.loads(kubectl("-n", namespace, "get", "pods", "-o", "json"))
         rows = []
         for pod in payload.get("items", []):
@@ -203,12 +204,16 @@ def node_cpu_percent() -> float:
     return float(fields[2].removesuffix("%"))
 
 
-def wait_for_cool_node(max_percent: float, timeout: float = 180.0) -> float:
+def wait_for_cool_node(
+    max_percent: float,
+    protected_namespaces: tuple[str, ...],
+    timeout: float = 180.0,
+) -> float:
     deadline = time.monotonic() + timeout
     consecutive = 0
     while time.monotonic() < deadline:
         usage = node_cpu_percent()
-        snapshot = service_snapshot()
+        snapshot = service_snapshot(protected_namespaces)
         assert_services_ready(snapshot)
         if usage <= max_percent:
             consecutive += 1
@@ -328,6 +333,7 @@ def wait_for_completion(
     *,
     timeout: float,
     samples: list[dict[str, Any]],
+    protected_namespaces: tuple[str, ...],
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last_sample = 0.0
@@ -350,7 +356,7 @@ def wait_for_completion(
         ):
             return payload
         if time.monotonic() - last_sample >= 2.0:
-            services = service_snapshot()
+            services = service_snapshot(protected_namespaces)
             assert_services_ready(services)
             samples.append(
                 {
@@ -471,6 +477,9 @@ def collect_run(
         "makespan_seconds": max(row["completion_time"] for row in rows)
         - min(row["creation_time"] for row in rows),
         "avg_ilt_seconds": sum(b - a for a, b in pairwise(starts)) / (len(starts) - 1),
+        "median_jct_seconds": median(jcts),
+        "max_to_median_jct_ratio": max(jcts) / median(jcts),
+        "p95_to_median_jct_ratio": percentile(jcts, 0.95) / median(jcts),
     }
     return {
         "arm": arm,
@@ -507,6 +516,7 @@ def execute_arm(
     cooldown_cpu_percent: float,
     jobs_per_run: int,
     workload_profile: str,
+    protected_namespaces: tuple[str, ...],
 ) -> dict[str, Any]:
     namespace = arm_namespace(arm)
     run_id = f"tfp-{ARM_SETTINGS[arm]['code']}-r{repetition}-{int(time.time())}"
@@ -539,7 +549,7 @@ def execute_arm(
     (output / f"{run_id}-manifest.json").write_text(
         json.dumps(manifests, indent=2) + "\n", encoding="utf-8"
     )
-    starting_cpu = wait_for_cool_node(cooldown_cpu_percent)
+    starting_cpu = wait_for_cool_node(cooldown_cpu_percent, protected_namespaces)
     samples: list[dict[str, Any]] = []
     print(
         f"START arm={arm} repetition={repetition} run_id={run_id} cpu={starting_cpu:.1f}%",
@@ -560,6 +570,7 @@ def execute_arm(
             len(jobs),
             timeout=timeout,
             samples=samples,
+            protected_namespaces=protected_namespaces,
         )
         result = collect_run(arm, repetition, run_id, namespace, pods)
         if admission is not None:
@@ -690,6 +701,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="run the predeclared 30-block, seven-arm reviewer-hardening matrix",
     )
+    parser.add_argument(
+        "--matrix-repetitions",
+        type=int,
+        default=30,
+        help="complete blocks for --reviewer-matrix (minimum 30; use 50 for the extension)",
+    )
     parser.add_argument("--image", default="registry.local/kubeml/ml-sim-job:0.3.0")
     parser.add_argument("--cpu", default="1")
     parser.add_argument("--jobs", type=int, default=12)
@@ -705,9 +722,23 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="resume an interrupted run directory after verifying its immutable configuration",
     )
+    parser.add_argument(
+        "--environment",
+        choices=("shared-production", "dedicated"),
+        default="shared-production",
+        help="evidence boundary; only a complete reviewer matrix on a dedicated node is claim-eligible",
+    )
+    parser.add_argument(
+        "--protected-namespace",
+        action="append",
+        default=None,
+        help="namespace whose Pod readiness is checked before, during, and after every arm",
+    )
     args = parser.parse_args(argv)
     if args.reviewer_matrix:
-        args.repetitions = 30
+        if args.matrix_repetitions < 30:
+            parser.error("--matrix-repetitions must be >= 30")
+        args.repetitions = args.matrix_repetitions
         args.arms = list(ARM_SETTINGS)
     if args.repetitions <= 0:
         parser.error("--repetitions must be > 0")
@@ -718,6 +749,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             "--arms must include native-default or baseline and at least one comparison arm"
         )
+    protected_namespaces = tuple(
+        dict.fromkeys(args.protected_namespace or ("parapolu", "vpn"))
+        if args.environment == "shared-production"
+        else dict.fromkeys(args.protected_namespace or ())
+    )
     run_config = {
         "schema_version": "1.0",
         "repetitions": args.repetitions,
@@ -728,6 +764,8 @@ def main(argv: list[str] | None = None) -> int:
         "workload_profile": args.workload_profile,
         "cooldown_cpu_percent": args.cooldown_cpu_percent,
         "arm_order_seed": "20260810 + repetition",
+        "environment": args.environment,
+        "protected_namespaces": list(protected_namespaces),
     }
     if args.resume_run is None:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -741,7 +779,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"--resume-run is not a directory: {output}")
         runs = resume_runs(output, run_config)
     ensure_baseline_namespace()
-    initial_services = service_snapshot()
+    initial_services = service_snapshot(protected_namespaces)
     assert_services_ready(initial_services)
     completed = {(run["repetition"], run["arm"]) for run in runs}
     try:
@@ -763,21 +801,33 @@ def main(argv: list[str] | None = None) -> int:
                         cooldown_cpu_percent=args.cooldown_cpu_percent,
                         jobs_per_run=args.jobs,
                         workload_profile=args.workload_profile,
+                        protected_namespaces=protected_namespaces,
                     )
                 )
                 write_json_atomic(output / "runs.partial.json", runs)
                 completed.add((repetition, arm))
                 time.sleep(5)
-        final_services = service_snapshot()
+        final_services = service_snapshot(protected_namespaces)
         assert_services_ready(final_services)
+        complete_registered_matrix = (
+            args.reviewer_matrix
+            and args.repetitions >= 30
+            and set(arms) == set(ARM_SETTINGS)
+            and len(runs) == args.repetitions * len(arms)
+        )
+        eligible_for_article_claim = (
+            args.environment == "dedicated" and complete_registered_matrix
+        )
         report = {
             "schema_version": "1.0",
             "kind": "paired-real-training-fast-path-pilot",
-            "eligible_for_article_claim": False,
+            "eligible_for_article_claim": eligible_for_article_claim,
             "reason": (
-                "Shared France K3s node with colocated VPN services; validates the "
-                "production extension but is not the clean registered article matrix."
+                "complete registered matrix on an explicitly declared dedicated node"
+                if eligible_for_article_claim
+                else "shared production node or incomplete registered matrix"
             ),
+            "environment": args.environment,
             "workload": {
                 "type": "training-only",
                 "implementation": "versioned NumPy matrix/gradient/checkpoint trainer",

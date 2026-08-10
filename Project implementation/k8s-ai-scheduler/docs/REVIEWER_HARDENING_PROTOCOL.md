@@ -27,10 +27,31 @@ gate record.
 Run on a dedicated Kubernetes node after deploying this branch's controller:
 
 ```bash
-python scripts/run_training_fastpath_pilot.py \
-  --reviewer-matrix \
-  --output-root /root/kubeml-reviewer-matrix
+KUBEML_ENVIRONMENT=dedicated bash scripts/run_reviewer_matrix.sh
 ```
+
+The preregistered minimum is 30 complete blocks. A 50-block extension uses the
+same immutable arms and analysis pipeline:
+
+```bash
+KUBEML_ENVIRONMENT=dedicated KUBEML_REPETITIONS=50 \
+  bash scripts/run_reviewer_matrix.sh
+```
+
+On the shared France production node, omit the environment override. The same
+matrix and analysis will run, but the result remains explicitly exploratory and
+cannot be included as claim-ready evidence. Interrupted executions can be
+continued without repeating completed arms:
+
+```bash
+KUBEML_RESUME_RUN=/root/kubeml-reviewer-matrix/<run-id> \
+  bash scripts/run_reviewer_matrix.sh
+```
+
+After all 210 bursts pass validation, the command writes the raw result, a JSON
+analysis, paired-effect CSV, bootstrap confidence intervals, exact sign tests,
+fairness diagnostics, and a LaTeX table. Incomplete matrices fail closed and do
+not produce a publication table.
 
 The protocol was amended before execution to add the ungated `native-default`
 arm. The registered matrix is 30 repetitions × 7 arms = 210 completed bursts. The
