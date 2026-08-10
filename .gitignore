@@ -37,3 +37,12 @@ Thumbs.db
 Project implementation/*.csv
 Project implementation/*.json
 Project implementation/*.png
+
+# LaTeX build intermediates (the compiled paper PDF remains tracked)
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.log
+paper/*.out
