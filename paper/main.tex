@@ -7,6 +7,7 @@
 \usepackage{tabularx}
 \usepackage{amsmath,amssymb}
 \usepackage{microtype}
+\usepackage{balance}
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
 \setcounter{dbltopnumber}{2}
@@ -18,39 +19,39 @@
 
 \begin{document}
 
-\title{KubeML-Aware: Kubernetes-Native Rank-Aware Admission for Burst-Submitted ML Training}
+\title{Gate-Controlled Admission Ordering for Burst-Submitted Kubernetes Training Jobs: Design and Pilot Evidence}
 
 \author{Amir Mirzaei Movahed and Majid Bafandeh%
 \IEEEcompsocitemizethanks{%
 \IEEEcompsocthanksitem Amir Mirzaei Movahed: \href{mailto:Amir.m.movahed@ut.ac.ir}{Amir.m.movahed@ut.ac.ir}.
-\IEEEcompsocthanksitem Majid Bafandeh: \href{mailto:majidb@aut.ac.ir}{majidb@aut.ac.ir}.}}
+\IEEEcompsocthanksitem Majid Bafandeh: \href{mailto:majid.bafandeh@aut.ac.ir}{majid.bafandeh@aut.ac.ir}.}}
 
-\markboth{Manuscript prepared for journal review, 2026}{Mirzaei Movahed and Bafandeh: KubeML-Aware}
+\markboth{Manuscript prepared for journal review, 2026}{Mirzaei Movahed and Bafandeh: Gate-Controlled Admission Ordering}
 \maketitle
 
 \begin{abstract}
-Kubernetes makes mature placement decisions for Pods, but its default policy does not infer the relative value of machine-learning (ML) training jobs from their convergence and workload characteristics. This distinction matters when heterogeneous jobs arrive as a burst and compete on the same node. We present \system, a training-specific admission layer that leaves feasibility checks, node scoring, and binding to the default scheduler. The system collects a complete burst, derives a deterministic rank from six annotated characteristics, and controls scheduling eligibility through stable Pod scheduling gates. A fail-closed FastPath uses bounded CPU demand and fresh node telemetry to prefill the scheduler queue when progress can be established; a small tail optimizer may rearrange only the lowest-ranked jobs. We implemented the controller as an in-cluster service and evaluated the deployed path by executing real Kubernetes Jobs on a shared four-core K3s node. The controlled NumPy trainer performs matrix operations, gradient-buffer updates, synchronization copies, and checkpoint I/O. Five paired repetitions compared 12 heavy jobs under synchronized FIFO admission and \system. Mean job completion time fell from 31.047 to 28.755~s, a mean paired improvement of 7.31\% (exploratory 95\% CI [2.57\%, 12.05\%]). Makespan moved in the same direction (55.369 to 54.005~s, 2.47\%) and decreased in all five pairs, but its paired interval includes zero, so we report it as directional rather than an established effect. These measurements support the feasibility of Kubernetes-native, rank-aware admission, but they are a small CPU-only pilot on a non-isolated node; they do not establish general performance for GPU or multi-node training.
+Kubernetes makes mature Pod-placement decisions, but its default policy does not derive a burst-relative execution order from training characteristics. We present \system, a gate-controlled admission layer that preserves the default scheduler's feasibility, scoring, and binding path. The six-feature ranking ratios are adopted from Abdelshaheed and Ashour; our contribution is their validated Kubernetes-native realization through Scheduling Readiness gates, auditable application-start evidence, a telemetry-bounded FastPath, and bounded tail balancing. We implemented the controller as an in-cluster service and executed real Kubernetes Jobs on a shared four-core K3s node. Five paired repetitions compared 12 controlled NumPy training jobs under synchronized FIFO admission and the deployed policy. Mean job completion time fell from 31.047 to 28.755~s, a mean paired improvement of 7.31\% (exploratory 95\% CI [2.57\%, 12.05\%]). Makespan changed from 55.369 to 54.005~s (2.47\%); its paired interval includes zero and the exact two-sided sign test for five improvements is $p=0.0625$, so this is directional evidence rather than an established effect. An audit of the five archived bursts shows that the six-feature score is strongly related to a duration-only score (mean Spearman $\rho=0.922$) but never produces the identical complete order; 6.8 of 12 positions change on average. These results establish an auditable production path and a small CPU-only pilot, not superiority to duration-only scheduling or general performance for GPU and multi-node training.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Kubernetes, machine-learning training, scheduling gates, admission control, job ranking, job completion time.
+Kubernetes, scheduling readiness, admission ordering, training jobs, FastPath, job completion time.
 \end{IEEEkeywords}
 
 \section{Introduction}
 
 Training workloads rarely behave as interchangeable batch jobs. Even when two Pods request the same CPU and memory, their useful work can differ in duration, convergence rate, matrix or tensor scale, synchronization volume, and checkpoint frequency. Production traces show that this heterogeneity is a central difficulty in ML cluster management, alongside queueing delay and uneven accelerator utilization~\cite{weng2022mlaas}. When a set of jobs is submitted together, the admission order can therefore change which jobs obtain early access to a contested node and how quickly the burst clears.
 
-Kubernetes exposes a rich scheduling framework for deciding \emph{where} a Pod may run. The default scheduler filters infeasible nodes, scores the remaining candidates, and binds each Pod while respecting requests, taints, affinity, storage, and topology constraints~\cite{kubernetesSchedulingFramework}. It does not, however, derive a burst-relative priority from training behavior. A PriorityClass can express importance chosen by an operator, but it does not estimate that importance from ML features. Replacing the scheduler is one way to add such a policy, although it also creates the burden of reproducing or safely composing with mature placement logic.
+Kubernetes exposes a rich scheduling framework for deciding \emph{where} a Pod may run. The default scheduler filters infeasible nodes, scores the remaining candidates, and binds each Pod while respecting requests, taints, affinity, storage, and topology constraints~\cite{kubernetesSchedulingFramework}. It does not, however, derive a burst-relative priority from training behavior. A PriorityClass maps a cluster-scoped name to a fixed integer and places higher-priority eligible Pods earlier in the scheduler queue; unless configured as non-preempting, it may also evict lower-priority work~\cite{kubernetesPriority}. It is useful for operator-declared service importance, but it does not compute a score relative to the other jobs in one burst. \system{} instead recomputes ordering after complete-burst validation and uses one-way gates without changing Pod priority or invoking preemption. An operator could manually translate the same features into PriorityClasses, but that would be a separate static policy and would require managing a finite global class set rather than a burst-local order.
 
 This paper studies a narrower alternative: change when a training Pod becomes eligible for the existing scheduler, without replacing node selection. \system{} uses Pod Scheduling Readiness~\cite{kubernetesSchedulingReadiness} to hold every member of an annotated burst behind a scheduling gate. Once the complete burst is present, a controller validates six features, calculates a deterministic order, and removes the gates according to a resource-aware policy. Gate removal does not bind a Pod or reserve a node; the default scheduler remains the placement authority.
 
 The ranking model originates from the six-feature formulation in~\cite{abdelshaheed2025intelligent}, but the deployed system differs materially from a manual-binding reproduction. It adds complete-burst validation, stable scheduling gates, resource-bounded manifests, fresh Metrics API feedback, crash-safe records, structured application-level start evidence, and a FastPath that avoids controller-induced gaps. The evaluation reports only measurements generated by this implementation. Published percentages from the source formulation are not treated as results of \system{} or as a head-to-head comparison because the two studies used different implementations, workloads, and environments.
 
-The paper makes three contributions:
+The paper makes three system contributions:
 \begin{itemize}
-  \item a deterministic, burst-relative training rank with explicit validation, normalization, and tie handling;
-  \item a Kubernetes-native controller that applies the rank through scheduling gates and a fail-closed, telemetry-aware FastPath while retaining \texttt{default-scheduler}; and
-  \item a paired real-cluster pilot that executes identical physical CPU workloads in both arms and measures mean JCT and burst makespan from application-emitted events.
+  \item a Kubernetes-native controller that applies an adopted, deterministic training rank through scheduling gates while retaining \texttt{default-scheduler};
+  \item a fail-closed FastPath and bounded tail balancer whose decisions, inputs, and application-level execution evidence are persisted for replay and audit; and
+  \item a paired real-cluster pilot plus an artifact-backed structural audit that exposes both the observed benefit and the unresolved duration-only confound.
 \end{itemize}
 
 The evidence is deliberately bounded. The workload is a controlled training proxy rather than a neural-network benchmark; the cluster has one shared CPU node; and the five repetitions are insufficient for broad claims about other workloads or environments. The aim is to establish an auditable production path and a credible first measurement, not to claim an optimal general-purpose ML scheduler.
@@ -72,6 +73,8 @@ ML schedulers have progressively incorporated signals that generic resource decl
 Recent Kubernetes-specific systems emphasize placement at larger scale. DRL-MLS learns placement decisions for ML training in a heterogeneous nine-node cluster~\cite{dong2026drlmls}. Sakkara models rack and node topology to reduce interference and communication cost for distributed AI workloads~\cite{santos2026sakkara}. A 2026 review similarly shows that current Kubernetes scheduling research spans placement, energy, interference, topology, and learning-based policies~\cite{alhakimi2026review}.
 
 \system{} occupies a deliberately smaller design point. It neither reallocates accelerators nor learns a node-placement policy. It ranks an explicitly declared training burst, regulates scheduler eligibility, and preserves the default binding path. That restricted scope reduces integration risk, but also means that multi-node topology, GPU sharing, online adaptation, and tenant fairness remain outside the current contribution.
+
+The policy also has a classical scheduling interpretation. Favoring smaller $T$ is an SPT/weighted-SJF-style heuristic related to Smith's sequencing rule~\cite{smith1956optimizers}; assigning a ranked list to a bounded number of predicted lanes is list scheduling in the sense studied by Graham~\cite{graham1969bounds}. The six-feature score augments the duration term, while the tail balancer performs a bounded exhaustive search over at most four jobs. We therefore do not claim a new scheduling primitive or optimality result. The novelty evaluated here is the default-scheduler-preserving gate-control path and its evidence model.
 
 \section{KubeML-Aware Design}
 
@@ -119,7 +122,9 @@ The base score is
 S_j=0.32\hat{T}_j+0.28\hat{R}_j+0.16\hat{M}_j+0.12\hat{G}_j+0.08\hat{C}_j+0.04\hat{P}_j.
 \label{eq:rank}
 \end{equation}
-Jobs are sorted by decreasing $S_j$. The coefficients are fixed before evaluation and sum to 1. Scaling all coefficients by the same positive constant would not change the order. In the current generator, $T$ is derived from the other five features, so the terms are not statistically independent. The score should consequently be read as an explicit policy, not a learned predictor or an optimality proof. Scores are also local to one burst and cannot be compared across runs.
+Jobs are sorted by decreasing $S_j$. The relative coefficients are adopted from~\cite{abdelshaheed2025intelligent} and uniformly divided by 1.25, changing the original sum from 1.25 to 1 while preserving every score ratio and order. They were not tuned on the pilot. In the current generator, $T$ is itself derived from $R,M,G,C,$ and $P$, so the six inputs are not independent. The score is therefore an explicit weighted-SPT-like policy, not a learned predictor or an optimality proof. Scores are local to one burst and cannot be compared across runs.
+
+We quantified this dependence from the 60 archived job manifests (five bursts of 12). Within each burst, the six-feature score and the duration-only desirability score had mean Pearson correlation 0.944, Spearman $\rho=0.922$, and Kendall $\tau_b=0.818$. The full order never matched exactly: 6.8 jobs changed position per burst, the mean absolute shift was 0.9 places, and the top-three overlap was 2.6 of 3. Thus the additional terms do change decisions, but the high correlation confirms that the current pilot cannot attribute its measured JCT change specifically to information beyond $T$. These are structural diagnostics, not a live duration-only performance result.
 
 \subsection{Training FastPath}
 
@@ -130,19 +135,19 @@ A burst is FastPath-eligible only when it is training-only, uses no experimental
 u_{\mathrm{projected}}=u+\frac{D}{A}.
 \label{eq:headroom}
 \end{equation}
-If the whole burst fits, all gates are removed in ranked order. If at least one ranked Pod fits but the burst exceeds current headroom, the implementation still prefills the complete ranked queue; the default scheduler then keeps infeasible Pods pending according to their normal requests and constraints. If telemetry is stale or no bounded demand can be established, FastPath fails closed and the controller returns to the conservative path.
+If the whole burst fits, all gates are removed in ranked order. If at least one ranked Pod fits but the burst exceeds current headroom, the implementation still prefills the complete ranked queue; the default scheduler then keeps infeasible Pods pending according to its normal requests and constraints. If telemetry is stale or no bounded demand can be established, FastPath fails closed and the controller returns to the conservative path. In all five reported runs, $D=12$ cores, $A=4$ cores, and mean $u=0.304$, yielding mean $u_{\mathrm{projected}}=3.304>\tau$. Consequently, the whole-burst-fit branch was never selected: every run used \texttt{ranked\_queue\_prefill}, with a two-Pod headroom estimate and 12 initial gate removals. This is recorded behavior, not an inference from configuration.
 
-Before queue prefill, the controller may permute at most the four lowest-ranked jobs. It predicts a list schedule from $T$, keeps the high-priority prefix fixed, and chooses the suffix with the lowest predicted makespan, using cumulative completion time as a secondary criterion. At most $4! = 24$ permutations are examined. Validation and feature normalization are $O(N)$, ranking is $O(N\log N)$, and the bounded suffix search does not change the asymptotic complexity.
+Before queue prefill, the controller may permute at most the four lowest-ranked jobs. It predicts a list schedule from $T$, keeps the high-priority prefix fixed, and chooses the suffix with the lowest predicted makespan, using cumulative completion time as a secondary criterion. With $N=12$ and window four, the recorded protected prefix is eight jobs; tail balancing was selected in all five runs. At most $4! = 24$ permutations are examined. Validation and feature normalization are $O(N)$, ranking is $O(N\log N)$, and the bounded suffix search does not change the asymptotic complexity.
 
 \section{Workload and Experimental Method}
 
 \subsection{Controlled training proxy}
 
-The experiment uses work-model version 2.0 and a containerized NumPy trainer~\cite{harris2020numpy}. For each step, the process multiplies partitions of two $M\times M$ float matrices, updates a $G$-MiB gradient buffer, and performs $P-1$ physical buffer copies when $P>1$. Synthetic loss follows
+The experiment uses work-model version 2.0 and a containerized NumPy trainer~\cite{harris2020numpy}. For each step, the process multiplies partitions of two $M\times M$ float matrices, updates a $G$-MiB gradient buffer, and performs $P-1$ in-memory buffer copies when $P>1$. Synthetic loss follows
 \begin{equation}
 L_{s+1}=L_s e^{-R},
 \end{equation}
-and training stops at the convergence threshold or a bounded step budget. Every $C$ steps, the process writes a bounded model-state payload and calls \texttt{fsync}. $T$ is estimated from this versioned work model; it does not terminate the process.
+and training stops below 0.02 or at a bounded step budget. Specifically, convergence steps are $\lfloor\log(1/0.02)/R\rfloor+1$ and the budget is $\min(512,\max(64,\lceil4(M/32)(1+G/10)\rceil))$. The planned step count is their minimum. Every $C$ steps, the process writes and \texttt{fsync}s a payload between 4~KiB and 16~MiB. The estimator uses 0.5~ms for a $128^2$ matrix operation, 5000~MiB/s for gradient copies, 250~MiB/s for checkpoints, and 0.5~ms per partition synchronization. These constants are explicit reproduction assumptions, not calibrated hardware truths. $T$ sums the four estimated costs; it does not terminate the process.
 
 The reported pilot uses the heavy profile only: $R\in[0.03,0.08]$, $M\in[512,1024]$, $G\in[20,50]$~MiB, $C\in[20,50]$ steps, and $P\in[2,4]$. BLAS is restricted and attested to one thread. The workload exercises real CPU, memory, copying, and local I/O, but it is not a neural network, does not read a dataset, uses no GPU, and performs no inter-node communication. The shared parameters between the ranker and proxy make the pilot suitable for validating the control path, but not for establishing robustness to feature-estimation error.
 
@@ -163,7 +168,7 @@ Virtual machine & KVM; x86-64 architecture \\
 Processor & 4 vCPU; Intel Xeon Gold 6138 at 2.00~GHz \\
 Memory & 7.57~GiB installed \\
 Operating system & Ubuntu 22.04.5 LTS; Linux 5.15.0-177-generic \\
-Orchestrator & Single-node K3s/Kubernetes v1.36.2+k3s1; control-plane Ready \\
+Orchestrator & Single-node K3s/Kubernetes v1.36.2+k3s1~\cite{k3s2026}; control-plane Ready \\
 Container runtime & containerd 2.3.2-k3s2 \\
 Training image & \path{registry.local/kubeml/ml-sim-job:0.3.0} \\
 Pod resources & 1 vCPU request/limit; 128~MiB request; 1~GiB limit \\
@@ -183,6 +188,7 @@ I_{m,r}=100\frac{m_{\mathrm{FIFO},r}-m_{\system,r}}{m_{\mathrm{FIFO},r}}.
 \end{equation}
 Positive values mean that \system{} reduced the metric. We report the mean of the five within-pair percentages. Exploratory 95\% intervals use a Student-$t$ interval over those five paired effects; given the small sample and shared host, they are descriptive rather than confirmatory.
 
+\balance
 \section{Results and Discussion}
 
 \subsection{Paired pilot results}
@@ -205,7 +211,7 @@ Makespan    & 55.369 s & 54.005 s & $+2.47\%$ & [$-0.45$, 5.40] \\
 \end{tabular}
 \end{table}
 
-Makespan also improved in all five pairs, but by a smaller and more variable amount: 0.55\% to 5.87\%, with a mean paired improvement of 2.47\%. Its exploratory interval crosses zero. The consistency of the observed direction is encouraging, but five runs on a shared node do not support a general throughput claim.
+Makespan also improved in all five pairs, but by a smaller and more variable amount: 0.55\% to 5.87\%, with a mean paired improvement of 2.47\%. Its exploratory interval crosses zero. An exact two-sided sign test for five same-direction pairs gives $p=2/2^5=0.0625$. The observed direction is encouraging, but five runs on a shared node do not support a general throughput claim.
 
 As a secondary diagnostic, p95 JCT changed from 52.896 to 53.270~s (a 0.75\% paired regression). With only 12 jobs per arm, this percentile lies close to the maximum and is unstable; it is therefore not used as a headline outcome. The observation nevertheless indicates that a future policy should include an explicit tail-latency or aging objective.
 
@@ -216,7 +222,7 @@ As a secondary diagnostic, p95 JCT changed from 52.896 to 53.270~s (a 0.75\% pai
   \label{fig:results}
 \end{figure*}
 
-Fig.~\ref{fig:timeline} visualizes application-level execution intervals for repetition 0. The FIFO arm largely follows manifest order, whereas \system{} brings several jobs from later manifest positions into the first execution wave. This is direct evidence that the gate policy changed admission and observed start order. It is not, by itself, evidence that the six-feature equation, queue prefill, or tail optimizer caused a particular fraction of the final improvement.
+Fig.~\ref{fig:timeline} visualizes application-level execution intervals for repetition 0, the first pair by registered index rather than a pair selected by outcome. The FIFO arm largely follows manifest order, whereas \system{} brings several jobs from later manifest positions into the first execution wave. This is direct evidence that the gate policy changed admission and observed start order. It is not, by itself, evidence that the six-feature equation, queue prefill, or tail optimizer caused a particular fraction of the final improvement.
 
 \begin{figure*}[t]
   \centering
@@ -227,19 +233,22 @@ Fig.~\ref{fig:timeline} visualizes application-level execution intervals for rep
 
 \subsection{Threats to validity}
 
-The main threat is the environment. The evaluation node was an operational server, not an isolated benchmark host. Alternating arm order, paired inputs, cool-node checks, and unchanged protected-service state reduce systematic bias, but cannot remove background variation. We therefore label this run as a production-path pilot rather than a isolated benchmark.
+The main threat is the environment. The evaluation node was an operational server, not an isolated benchmark host. Alternating arm order, paired inputs, cool-node checks, and unchanged protected-service state reduce systematic bias, but cannot remove background variation. We therefore label this run as a production-path pilot rather than an isolated benchmark.
 
 Second, the evaluation contains only five pairs and one 12-job heavy profile. The intervals in Table~\ref{tab:results} depend on a small-sample normality assumption and should not be read as definitive significance tests. A tail percentile estimated from 12 observations per arm is especially weak.
 
 Third, the controlled trainer shares its feature semantics with the ranking policy. That choice makes workload behavior auditable and prevents sleep-based simulation, but it may favor a rank whose inputs were designed around the same cost model. Real PyTorch or TensorFlow jobs can exhibit data stalls, framework overhead, GPU kernels, communication, and convergence error that this proxy does not represent.
 
-Finally, the measured treatment combines six-feature ranking, queue prefill, and bounded tail balancing. No live duration-only, reversed-order, FastPath-without-tail, or alternative-weight arm was included. The pilot therefore measures the deployed policy as a whole and cannot assign causality to one component. These limitations are part of the result boundary, not future details that can be assumed away.
+Finally, the measured treatment combines six-feature ranking, queue prefill, and bounded tail balancing. No live duration-only, reversed-order, FastPath-off, or no-tail arm was included. The pilot therefore measures the deployed policy as a whole and cannot assign causality to one component. The artifact now contains tested controller support and a preregistered 30-block, six-arm protocol for those comparisons, but that matrix has not been executed and contributes no result to this paper. These limitations are part of the result boundary, not future details that can be assumed away.
 
 \section{Conclusion}
 
 \system{} shows that an ML-specific admission policy can be added to Kubernetes without replacing its placement engine. A controller ranks a complete annotated training burst, removes stable scheduling gates, and uses fresh resource evidence to avoid unnecessary admission gaps. On a shared four-core K3s node, the deployed policy reduced mean JCT by 7.31\% across five paired 12-job runs (exploratory 95\% CI [2.57\%, 12.05\%]); makespan moved in the same direction (2.47\%) but its interval includes zero and is not an established effect. Both metrics decreased in every pair.
 
-The result is promising but preliminary. The next evaluation should run on a dedicated cluster with more repetitions, predeclared ablations, and real framework workloads. GPU and multi-node experiments must give $G$ and $P$ measured communication and parallelism semantics; profiling should replace generator-provided estimates; and aging or an explicit tail objective should improve robustness. Source code and experiment artifacts are available at \url{https://github.com/AmirMirzaeiMovahed/KubeML-Aware}.
+The result is promising but preliminary. The next evaluation should execute the registered matrix on a dedicated cluster and then add real framework workloads. GPU and multi-node experiments must give $G$ and $P$ measured communication and parallelism semantics; profiling should replace generator-provided estimates; and aging or an explicit tail objective should improve robustness. Source code, the five-pair evidence, structural diagnostics, and the unexecuted ablation protocol are available in the project artifact~\cite{kubeml2026artifact}.
+
+\section*{Author Contributions}
+Amir Mirzaei Movahed: conceptualization, software, experiment execution, data curation, visualization, and writing--original draft. Majid Bafandeh: supervision, methodology review, validation, and writing--review and editing. Both authors reviewed and approved the manuscript.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
