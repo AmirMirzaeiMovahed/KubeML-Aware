@@ -1,0 +1,43 @@
+{
+  "repetitions": 5,
+  "jobs_per_arm": 12,
+  "means": {
+    "baseline": {
+      "avg_ilt_seconds": 4.1989525448192255,
+      "avg_jct_seconds": 31.046652591228487,
+      "makespan_seconds": 55.36913847923279,
+      "max_jct_seconds": 54.56913847923279,
+      "min_jct_seconds": 8.54496989250183,
+      "p95_jct_seconds": 52.896000053882595
+    },
+    "kubeml": {
+      "avg_ilt_seconds": 4.037601345235651,
+      "avg_jct_seconds": 28.755245681603753,
+      "makespan_seconds": 54.00521206855774,
+      "max_jct_seconds": 53.805212068557736,
+      "min_jct_seconds": 6.537166786193848,
+      "p95_jct_seconds": 53.26978761196136
+    }
+  },
+  "paired_effects": {
+    "avg_jct": {
+      "mean": 7.306824447152522,
+      "sd": 3.816694743820583,
+      "ci95_low": 2.567771991616956,
+      "ci95_high": 12.045876902688088
+    },
+    "p95_jct": {
+      "mean": -0.7483112732880048,
+      "sd": 2.302414325179131,
+      "ci95_low": -3.607136249811551,
+      "ci95_high": 2.1105137032355414
+    },
+    "makespan": {
+      "mean": 2.474665085875358,
+      "sd": 2.354755390853243,
+      "ci95_low": -0.44914990752335315,
+      "ci95_high": 5.398480079274069
+    }
+  },
+  "evidence_reason": "Shared France K3s node with colocated VPN services; validates the production extension but is not the clean registered article matrix."
+}

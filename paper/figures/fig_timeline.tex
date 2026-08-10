@@ -1,0 +1,55 @@
+\documentclass[tikz,border=3pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\definecolor{baseline}{HTML}{626B78}
+\definecolor{kubeml}{HTML}{0072B2}
+\begin{document}
+\begin{tikzpicture}[x=0.215cm,y=0.285cm,font=\sffamily\tiny]
+
+% Baseline panel
+\begin{scope}
+  \node[anchor=west,font=\sffamily\small\bfseries] at (0,13.5) {Synchronized FIFO baseline};
+  \foreach \x in {0,10,...,60} {
+    \draw[black!10] (\x,0.6) -- (\x,12.5);
+    \node[below,text=black!70] at (\x,0.55) {\x};
+  }
+  \draw[black!55] (0,0.6) -- (60,0.6);
+  \node[left] at (0,12) {J00}; \draw[baseline,line width=4pt] (5.479,12)--(11.344,12);
+  \node[left] at (0,11) {J01}; \draw[baseline,line width=4pt] (5.969,11)--(9.991,11);
+  \node[left] at (0,10) {J02}; \draw[baseline,line width=4pt] (14.905,10)--(16.105,10);
+  \node[left] at (0,9)  {J03}; \draw[baseline,line width=4pt] (16.475,9)--(21.019,9);
+  \node[left] at (0,8)  {J04}; \draw[baseline,line width=4pt] (21.230,8)--(23.674,8);
+  \node[left] at (0,7)  {J05}; \draw[baseline,line width=4pt] (26.258,7)--(29.992,7);
+  \node[left] at (0,6)  {J06}; \draw[baseline,line width=4pt] (28.743,6)--(36.794,6);
+  \node[left] at (0,5)  {J07}; \draw[baseline,line width=4pt] (35.339,5)--(37.773,5);
+  \node[left] at (0,4)  {J08}; \draw[baseline,line width=4pt] (41.602,4)--(45.696,4);
+  \node[left] at (0,3)  {J09}; \draw[baseline,line width=4pt] (42.838,3)--(47.425,3);
+  \node[left] at (0,2)  {J10}; \draw[baseline,line width=4pt] (50.821,2)--(53.894,2);
+  \node[left] at (0,1)  {J11}; \draw[baseline,line width=4pt] (52.468,1)--(54.858,1);
+\end{scope}
+
+% KubeML-Aware panel
+\begin{scope}[yshift=-4.25cm]
+  \node[anchor=west,font=\sffamily\small\bfseries] at (0,13.5) {KubeML-Aware ranked FastPath};
+  \foreach \x in {0,10,...,60} {
+    \draw[black!10] (\x,0.6) -- (\x,12.5);
+    \node[below,text=black!70] at (\x,0.55) {\x};
+  }
+  \draw[black!55] (0,0.6) -- (60,0.6);
+  \node[left] at (0,12) {J02}; \draw[kubeml,line width=4pt] (4.141,12)--(5.411,12);
+  \node[left] at (0,11) {J04}; \draw[kubeml,line width=4pt] (4.231,11)--(6.726,11);
+  \node[left] at (0,10) {J07}; \draw[kubeml,line width=4pt] (9.791,10)--(12.503,10);
+  \node[left] at (0,9)  {J10}; \draw[kubeml,line width=4pt] (11.308,9)--(14.519,9);
+  \node[left] at (0,8)  {J01}; \draw[kubeml,line width=4pt] (17.157,8)--(21.267,8);
+  \node[left] at (0,7)  {J11}; \draw[kubeml,line width=4pt] (19.591,7)--(22.154,7);
+  \node[left] at (0,6)  {J09}; \draw[kubeml,line width=4pt] (26.930,6)--(31.446,6);
+  \node[left] at (0,5)  {J08}; \draw[kubeml,line width=4pt] (27.080,5)--(31.048,5);
+  \node[left] at (0,4)  {J05}; \draw[kubeml,line width=4pt] (35.695,4)--(39.003,4);
+  \node[left] at (0,3)  {J00}; \draw[kubeml,line width=4pt] (36.700,3)--(42.502,3);
+  \node[left] at (0,2)  {J06}; \draw[kubeml,line width=4pt] (44.366,2)--(52.656,2);
+  \node[left] at (0,1)  {J03}; \draw[kubeml,line width=4pt] (47.160,1)--(51.790,1);
+  \node[font=\sffamily\scriptsize] at (30,-0.9) {Seconds since first Pod creation};
+\end{scope}
+
+\end{tikzpicture}
+\end{document}

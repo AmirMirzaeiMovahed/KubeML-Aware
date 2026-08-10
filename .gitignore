@@ -6,6 +6,7 @@
 credentials.json
 kubeconfig
 .kube/
+.kilo/
 
 # Python
 __pycache__/

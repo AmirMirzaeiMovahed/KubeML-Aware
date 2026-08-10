@@ -1,0 +1,62 @@
+\documentclass[tikz,border=3pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{pgfplots}
+\usepgfplotslibrary{groupplots}
+\pgfplotsset{compat=1.18}
+\definecolor{baseline}{HTML}{626B78}
+\definecolor{kubeml}{HTML}{0072B2}
+\definecolor{span}{HTML}{009E73}
+\begin{document}
+\begin{tikzpicture}[font=\sffamily\scriptsize]
+\pgfplotstableread[col sep=comma]{../data/paired_metrics.csv}\paireddata
+\begin{groupplot}[
+  group style={group size=2 by 1, horizontal sep=1.35cm},
+  width=8.0cm,
+  height=5.3cm,
+  tick label style={font=\sffamily\tiny},
+  label style={font=\sffamily\scriptsize},
+  title style={font=\sffamily\small\bfseries},
+  grid=major,
+  major grid style={draw=black!10},
+  axis line style={draw=black!65},
+]
+
+\nextgroupplot[
+  ybar,
+  bar width=8pt,
+  ymin=0,
+  ymax=61,
+  ylabel={Seconds (lower is better)},
+  symbolic x coords={Avg. JCT,Makespan},
+  xtick=data,
+  enlarge x limits=0.20,
+  legend style={at={(0.5,1.01)},anchor=south,legend columns=2,draw=none,font=\sffamily\tiny},
+]
+\addplot+[fill=baseline, draw=baseline] coordinates {
+  (Avg. JCT,31.047) (Makespan,55.369)};
+\addplot+[fill=kubeml, draw=kubeml] coordinates {
+  (Avg. JCT,28.755) (Makespan,54.005)};
+\legend{Kubernetes FIFO,KubeML-Aware}
+\node[font=\sffamily\tiny\bfseries] at (axis cs:Avg. JCT,34.5) {$+7.31\%$};
+\node[font=\sffamily\tiny\bfseries] at (axis cs:Makespan,59.0) {$+2.47\%$};
+
+\nextgroupplot[
+  xmin=-0.15,
+  xmax=4.15,
+  ymin=0,
+  ymax=14,
+  xtick={0,1,2,3,4},
+  xticklabels={R0,R1,R2,R3,R4},
+  xlabel={Paired repetition},
+  ylabel={Improvement over FIFO (\%)},
+  legend style={at={(0.5,1.01)},anchor=south,legend columns=2,draw=none,font=\sffamily\tiny},
+]
+\addplot+[kubeml, very thick, mark=*, mark options={solid}] table[x=repetition,y=improvement_avg_jct] {\paireddata};
+\addplot+[span, very thick, mark=triangle*, mark options={solid}] table[x=repetition,y=improvement_makespan] {\paireddata};
+\addplot+[black!65, thin, mark=none] coordinates {(-0.15,0) (4.15,0)};
+\legend{Average JCT,Makespan}
+
+\end{groupplot}
+\end{tikzpicture}
+\end{document}
