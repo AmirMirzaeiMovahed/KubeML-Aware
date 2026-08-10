@@ -26,7 +26,9 @@ class SchedulerConfig:
     max_wait: float = 30.0
     metrics_max_age: float = 30.0
     fast_path_enabled: bool = False
-    fast_path_cpu_threshold: float = 0.80
+    # Keep the library default identical to the production Helm profile and
+    # the threshold recorded in the paired pilot evidence.
+    fast_path_cpu_threshold: float = 0.85
     execution_timeout: float = 120.0
     api_timeout: float = 10.0
     api_retries: int = 4
@@ -96,7 +98,5 @@ class SchedulerConfig:
         if not 1 <= self.health_port <= 65535:
             raise ConfigurationError("health_port must be in [1, 65535]")
         if manual_binding and not self.target_node:
-            raise ConfigurationError(
-                "manual-binding reproduction requires an explicit target_node"
-            )
+            raise ConfigurationError("manual-binding reproduction requires an explicit target_node")
         return self

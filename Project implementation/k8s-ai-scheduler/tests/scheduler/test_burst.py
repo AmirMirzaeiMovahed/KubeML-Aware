@@ -13,12 +13,15 @@ from scheduler.burst import (
 from scheduler.constants import (
     ANNOTATION_MAP,
     EXPECTED_JOBS_ANNOTATION,
+    FAST_PATH_ANNOTATION,
     FIXED_DELAY_ANNOTATION,
     INFERENCE_ANNOTATION_MAP,
     PACING_MODE_ANNOTATION,
+    RANK_POLICY_ANNOTATION,
     REVERSE_ANNOTATION,
     RUN_ID_ANNOTATION,
     RUN_ID_LABEL,
+    TAIL_BALANCE_ANNOTATION,
     WORKLOAD_KIND_ANNOTATION,
 )
 from scheduler.rank import InferenceFeatures
@@ -116,6 +119,9 @@ def test_per_run_settings_override_fallback_and_must_match():
         PACING_MODE_ANNOTATION: "fixed",
         FIXED_DELAY_ANNOTATION: "2.5",
         REVERSE_ANNOTATION: "true",
+        RANK_POLICY_ANNOTATION: "duration_only",
+        TAIL_BALANCE_ANNOTATION: "false",
+        FAST_PATH_ANNOTATION: "true",
     }
     pods = [make_pod("a", **annotations), make_pod("b", **annotations)]
     settings = run_settings_for_pods(
@@ -131,6 +137,9 @@ def test_per_run_settings_override_fallback_and_must_match():
     assert settings.pacing_mode == "fixed"
     assert settings.fixed_delay == 2.5
     assert settings.reverse is True
+    assert settings.rank_policy == "duration_only"
+    assert settings.tail_balance is False
+    assert settings.fast_path_enabled is True
 
     pods[1].metadata.annotations[FIXED_DELAY_ANNOTATION] = "3"
     with pytest.raises(AnnotationValidationError, match="inconsistent"):

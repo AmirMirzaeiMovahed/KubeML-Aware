@@ -343,6 +343,78 @@ def test_gate_fast_path_batch_releases_training_before_marker_wait(tmp_path):
     assert decision["reason"] == "fresh_cpu_headroom"
 
 
+def test_gate_run_can_disable_fast_path_even_when_controller_default_is_on(tmp_path):
+    controller = make_gate(tmp_path)
+    controller.config.fast_path_enabled = True
+    pods = [pod("worst", gated=True), pod("best", best=True, gated=True)]
+    released = []
+    controller._collect = lambda _settings: pods
+    controller._remove_gate = released.append
+    controller._wait_for_execution_start = lambda name, **_kwargs: {
+        "best": 101.0,
+        "worst": 102.0,
+    }[name]
+
+    controller.process_run(
+        RunSettings(
+            "run-1",
+            2,
+            "none",
+            0,
+            False,
+            fast_path_enabled=False,
+        ),
+        one_shot=True,
+    )
+
+    assert released == ["best", "worst"]
+    document = json.loads((tmp_path / "gate.json").read_text())
+    decision = next(
+        event for event in document["events"] if event["event"] == "fast_path_decision"
+    )
+    assert decision["selected"] is False
+    assert decision["reason"] == "disabled"
+    assert document["metadata"]["run_fast_path_enabled"] is False
+
+
+def test_gate_duration_only_arm_uses_shortest_estimated_duration(tmp_path):
+    controller = make_gate(tmp_path)
+    short = pod("short", gated=True)
+    long = pod("long", gated=True)
+    short_values = dict(T="1", R="1", M="9", G="9", C="1", P="9")
+    long_values = dict(T="9", R="9", M="1", G="1", C="9", P="1")
+    for feature, value in short_values.items():
+        short.metadata.annotations[ANNOTATION_MAP[feature]] = value
+    for feature, value in long_values.items():
+        long.metadata.annotations[ANNOTATION_MAP[feature]] = value
+    released = []
+    controller._collect = lambda _settings: [long, short]
+    controller._remove_gate = released.append
+    controller._wait_for_execution_start = lambda name, **_kwargs: {
+        "short": 101.0,
+        "long": 102.0,
+    }[name]
+
+    controller.process_run(
+        RunSettings(
+            "run-1",
+            2,
+            "none",
+            0,
+            False,
+            rank_policy="duration_only",
+            tail_balance=False,
+            fast_path_enabled=False,
+        ),
+        one_shot=True,
+    )
+
+    assert released == ["short", "long"]
+    document = json.loads((tmp_path / "gate.json").read_text())
+    assert document["metadata"]["rank_policy"] == "duration_only"
+    assert document["metadata"]["tail_balance_enabled"] is False
+
+
 def test_contended_gate_keeps_ranked_headroom_window(tmp_path):
     controller = make_gate(tmp_path)
     controller.config.fast_path_enabled = True

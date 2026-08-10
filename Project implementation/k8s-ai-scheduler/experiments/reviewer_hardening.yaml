@@ -1,0 +1,95 @@
+schema_version: "1.0"
+kind: kubeml-reviewer-hardening-protocol
+status: registered-not-executed
+registered_at: "2026-08-10"
+description: >-
+  Prospective real-cluster matrix that separates the six-feature ordering,
+  duration-only baseline, FastPath, tail balancing, and reversed ordering.
+  This file is a protocol, not a result document.
+
+workload:
+  profile: heavy
+  jobs_per_burst: 12
+  repetitions: 30
+  seed: "8100 + repetition"
+  image: registry.local/kubeml/ml-sim-job:0.3.0
+  cpu_request_and_limit_per_pod: "1"
+  scheduler_name: default-scheduler
+  synchronized_launch_barrier: true
+
+arms:
+  - name: baseline
+    policy: synchronized-fifo
+    rank_policy: none
+    fast_path: false
+    tail_balance: false
+    reverse: false
+  - name: duration-only
+    policy: shortest-estimated-duration
+    rank_policy: duration_only
+    fast_path: true
+    tail_balance: false
+    reverse: false
+  - name: kubeml
+    policy: deployed-six-feature-policy
+    rank_policy: six_feature
+    fast_path: true
+    tail_balance: true
+    reverse: false
+  - name: six-feature-no-tail
+    policy: tail-ablation
+    rank_policy: six_feature
+    fast_path: true
+    tail_balance: false
+    reverse: false
+  - name: six-feature-no-fastpath
+    policy: fastpath-ablation
+    rank_policy: six_feature
+    fast_path: false
+    tail_balance: false
+    reverse: false
+  - name: reversed
+    policy: order-ablation
+    rank_policy: six_feature
+    fast_path: false
+    tail_balance: false
+    reverse: true
+
+execution_controls:
+  arm_order: deterministic-per-repetition-shuffle
+  arm_order_seed: "20260810 + repetition"
+  identical_workload_within_repetition: required
+  non_overlapping_namespaces: required
+  cool_node_gate:
+    maximum_cpu_percent: 35
+    consecutive_samples: 2
+    sample_interval_seconds: 5
+  protected_service_health: required-before-during-after
+  dedicated_node_for_publishable_claim: required
+
+outcomes:
+  primary:
+    - average_jct_seconds
+  secondary:
+    - makespan_seconds
+    - p95_jct_seconds
+    - max_jct_seconds
+    - average_ilt_seconds
+  fairness_diagnostics:
+    - max_to_median_jct_ratio
+    - p95_to_median_jct_ratio
+  pairing_keys:
+    - repetition
+    - seed
+  interpretation:
+    six_feature_value: compare kubeml with duration-only
+    fastpath_value: compare six-feature-no-tail with six-feature-no-fastpath
+    tail_value: compare kubeml with six-feature-no-tail
+    order_value: compare kubeml with reversed
+
+claim_policy:
+  executed_results_required: true
+  minimum_complete_repetitions: 30
+  failed_or_missing_arms_invalidate_block: true
+  protocol_must_not_be_described_as_executed: true
+  gpu_or_multinode_generalization: prohibited

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import random
 import subprocess
 import sys
 import time
@@ -36,11 +37,14 @@ from scheduler.constants import (  # noqa: E402
     ANNOTATION_MAP,
     EXECUTION_CONTAINER_ANNOTATION,
     EXPECTED_JOBS_ANNOTATION,
+    FAST_PATH_ANNOTATION,
     PACING_MODE_ANNOTATION,
+    RANK_POLICY_ANNOTATION,
     RELEASE_GATE,
     REVERSE_ANNOTATION,
     RUN_ID_ANNOTATION,
     RUN_ID_LABEL,
+    TAIL_BALANCE_ANNOTATION,
     WORKLOAD_KIND_ANNOTATION,
 )
 from scheduler.rank import compute_ranks  # noqa: E402
@@ -56,6 +60,51 @@ SCHEDULER_DEPLOYMENT = "kubeml-scheduler-ml-ai-scheduler"
 PILOT_LABEL = "pilot.kubeml/run-id"
 ARM_LABEL = "pilot.kubeml/arm"
 JOB_LABEL = "pilot.kubeml/job-index"
+
+ARM_SETTINGS: dict[str, dict[str, Any]] = {
+    "baseline": {
+        "code": "b",
+        "rank_policy": "six_feature",
+        "tail_balance": False,
+        "fast_path": False,
+        "reverse": False,
+    },
+    "kubeml": {
+        "code": "k",
+        "rank_policy": "six_feature",
+        "tail_balance": True,
+        "fast_path": True,
+        "reverse": False,
+    },
+    "duration-only": {
+        "code": "d",
+        "rank_policy": "duration_only",
+        "tail_balance": False,
+        "fast_path": True,
+        "reverse": False,
+    },
+    "six-feature-no-tail": {
+        "code": "n",
+        "rank_policy": "six_feature",
+        "tail_balance": False,
+        "fast_path": True,
+        "reverse": False,
+    },
+    "six-feature-no-fastpath": {
+        "code": "f",
+        "rank_policy": "six_feature",
+        "tail_balance": False,
+        "fast_path": False,
+        "reverse": False,
+    },
+    "reversed": {
+        "code": "r",
+        "rank_policy": "six_feature",
+        "tail_balance": False,
+        "fast_path": False,
+        "reverse": True,
+    },
+}
 
 
 def kubectl(
@@ -126,15 +175,9 @@ def assert_services_ready(snapshot: dict[str, list[dict[str, Any]]]) -> None:
     for namespace, pods in snapshot.items():
         if not pods:
             raise RuntimeError(f"protected namespace {namespace!r} has no Pods")
-        unhealthy = [
-            row["name"]
-            for row in pods
-            if row["phase"] != "Running" or not row["ready"]
-        ]
+        unhealthy = [row["name"] for row in pods if row["phase"] != "Running" or not row["ready"]]
         if unhealthy:
-            raise RuntimeError(
-                f"protected namespace {namespace!r} has unhealthy Pods: {unhealthy}"
-            )
+            raise RuntimeError(f"protected namespace {namespace!r} has unhealthy Pods: {unhealthy}")
 
 
 def node_cpu_percent() -> float:
@@ -173,6 +216,7 @@ def pod_manifest(
     cpu: str,
     expected_jobs: int,
 ) -> dict[str, Any]:
+    arm_settings = ARM_SETTINGS[arm]
     namespace = CUSTOM_NAMESPACE if arm == "kubeml" else BASELINE_NAMESPACE
     name = f"tfp-{arm[0]}-r{repetition}-{index:02d}"
     labels = {
@@ -187,7 +231,10 @@ def pod_manifest(
         RUN_ID_ANNOTATION: run_id,
         EXPECTED_JOBS_ANNOTATION: str(expected_jobs),
         PACING_MODE_ANNOTATION: "none",
-        REVERSE_ANNOTATION: "false",
+        REVERSE_ANNOTATION: str(arm_settings["reverse"]).lower(),
+        RANK_POLICY_ANNOTATION: str(arm_settings["rank_policy"]),
+        TAIL_BALANCE_ANNOTATION: str(arm_settings["tail_balance"]).lower(),
+        FAST_PATH_ANNOTATION: str(arm_settings["fast_path"]).lower(),
         EXECUTION_CONTAINER_ANNOTATION: "train",
         WORK_MODEL_ANNOTATION: WORK_MODEL_VERSION,
         BLAS_THREADS_ANNOTATION: str(REPRODUCTION_BLAS_THREADS),
@@ -446,7 +493,7 @@ def execute_arm(
     workload_profile: str,
 ) -> dict[str, Any]:
     namespace = CUSTOM_NAMESPACE if arm == "kubeml" else BASELINE_NAMESPACE
-    run_id = f"tfp-{arm[0]}-r{repetition}-{int(time.time())}"
+    run_id = f"tfp-{ARM_SETTINGS[arm]['code']}-r{repetition}-{int(time.time())}"
     if workload_profile == "heavy":
         jobs = generate_category_burst(
             jobs_per_run,
@@ -510,7 +557,7 @@ def execute_arm(
             }
             for job in jobs
         ]
-        if arm == "kubeml":
+        if arm != "baseline":
             gate_text = kubectl(
                 "-n",
                 CUSTOM_NAMESPACE,
@@ -535,62 +582,86 @@ def execute_arm(
         cleanup(namespace, run_id)
 
 
-def aggregate(runs: list[dict[str, Any]], repetitions: int) -> dict[str, Any]:
+def aggregate(runs: list[dict[str, Any]], repetitions: int, arms: list[str]) -> dict[str, Any]:
     metric_names = sorted(runs[0]["metrics"])
     means = {}
-    for arm in ("baseline", "kubeml"):
+    for arm in arms:
         subset = [run for run in runs if run["arm"] == arm]
         means[arm] = {
             metric: sum(run["metrics"][metric] for run in subset) / len(subset)
             for metric in metric_names
         }
-    paired = []
+    paired: list[dict[str, Any]] = []
     for repetition in range(repetitions):
         baseline = next(
             run for run in runs if run["arm"] == "baseline" and run["repetition"] == repetition
         )
-        custom = next(
-            run for run in runs if run["arm"] == "kubeml" and run["repetition"] == repetition
-        )
         row: dict[str, Any] = {"repetition": repetition}
-        for metric in ("avg_jct_seconds", "p95_jct_seconds", "makespan_seconds"):
-            row[f"{metric}_improvement_pct"] = 100 * (
-                baseline["metrics"][metric] - custom["metrics"][metric]
-            ) / baseline["metrics"][metric]
+        for arm in arms:
+            if arm == "baseline":
+                continue
+            candidate = next(
+                run for run in runs if run["arm"] == arm and run["repetition"] == repetition
+            )
+            for metric in ("avg_jct_seconds", "p95_jct_seconds", "makespan_seconds"):
+                row[f"{arm}.{metric}_improvement_pct"] = (
+                    100
+                    * (baseline["metrics"][metric] - candidate["metrics"][metric])
+                    / baseline["metrics"][metric]
+                )
         paired.append(row)
-    return {
+    report: dict[str, Any] = {
         "means": means,
         "paired": paired,
-        "mean_avg_jct_improvement_pct": sum(
-            row["avg_jct_seconds_improvement_pct"] for row in paired
-        )
-        / repetitions,
-        "mean_p95_jct_improvement_pct": sum(
-            row["p95_jct_seconds_improvement_pct"] for row in paired
-        )
-        / repetitions,
-        "mean_makespan_improvement_pct": sum(
-            row["makespan_seconds_improvement_pct"] for row in paired
-        )
-        / repetitions,
     }
+    report["mean_improvement_vs_baseline_pct"] = {
+        arm: {
+            metric: sum(row[f"{arm}.{metric}_improvement_pct"] for row in paired) / repetitions
+            for metric in ("avg_jct_seconds", "p95_jct_seconds", "makespan_seconds")
+        }
+        for arm in arms
+        if arm != "baseline"
+    }
+    return report
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repetitions", type=int, default=5)
+    parser.add_argument(
+        "--arms",
+        nargs="+",
+        choices=tuple(ARM_SETTINGS),
+        default=["baseline", "kubeml"],
+        help=(
+            "registered paired arms; use all six arms for the reviewer-hardening ablation matrix"
+        ),
+    )
+    parser.add_argument(
+        "--reviewer-matrix",
+        action="store_true",
+        help="run the predeclared 30-block, six-arm reviewer-hardening matrix",
+    )
     parser.add_argument("--image", default="registry.local/kubeml/ml-sim-job:0.3.0")
     parser.add_argument("--cpu", default="1")
     parser.add_argument("--jobs", type=int, default=12)
     parser.add_argument("--workload-profile", choices=("heavy", "mixed"), default="heavy")
     parser.add_argument("--timeout-seconds", type=float, default=240)
     parser.add_argument("--cooldown-cpu-percent", type=float, default=35)
-    parser.add_argument("--output-root", type=Path, default=Path("/root/kubeml-fastpath-030/benchmarks"))
+    parser.add_argument(
+        "--output-root", type=Path, default=Path("/root/kubeml-fastpath-030/benchmarks")
+    )
     args = parser.parse_args(argv)
+    if args.reviewer_matrix:
+        args.repetitions = 30
+        args.arms = list(ARM_SETTINGS)
     if args.repetitions <= 0:
         parser.error("--repetitions must be > 0")
     if args.jobs <= 1:
         parser.error("--jobs must be > 1")
+    arms = list(dict.fromkeys(args.arms))
+    if "baseline" not in arms or len(arms) < 2:
+        parser.error("--arms must include baseline and at least one comparison arm")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output = args.output_root / stamp
     output.mkdir(parents=True, exist_ok=False)
@@ -600,7 +671,8 @@ def main(argv: list[str] | None = None) -> int:
     runs: list[dict[str, Any]] = []
     try:
         for repetition in range(args.repetitions):
-            order = ("baseline", "kubeml") if repetition % 2 == 0 else ("kubeml", "baseline")
+            order = arms.copy()
+            random.Random(20260810 + repetition).shuffle(order)
             for arm in order:
                 runs.append(
                     execute_arm(
@@ -642,11 +714,13 @@ def main(argv: list[str] | None = None) -> int:
                     "launch barrier; no custom ranking or binding"
                 ),
             },
+            "arms": {arm: ARM_SETTINGS[arm] for arm in arms},
+            "arm_order": "deterministic per-repetition shuffle; seed 20260810 + repetition",
             "repetitions": args.repetitions,
             "initial_protected_services": initial_services,
             "final_protected_services": final_services,
             "runs": runs,
-            "aggregate": aggregate(runs, args.repetitions),
+            "aggregate": aggregate(runs, args.repetitions, arms),
         }
         result_path = output / "paired-training-results.json"
         result_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

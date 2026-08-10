@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 FEATURES: Tuple[str, ...] = ("T", "R", "M", "G", "C", "P")
+TRAINING_RANK_POLICIES: Tuple[str, ...] = ("six_feature", "duration_only")
 WEIGHTS: Dict[str, float] = {
     "T": 0.32,
     "R": 0.28,
@@ -90,9 +91,7 @@ def validate_jobs(jobs: Iterable[JobFeatures]) -> List[JobFeatures]:
         if not isinstance(job, JobFeatures):
             raise RankValidationError(f"jobs[{index}] is not a JobFeatures instance")
         if not isinstance(job.job_id, str) or not job.job_id.strip():
-            raise RankValidationError(
-                f"jobs[{index}].job_id must be a non-empty string"
-            )
+            raise RankValidationError(f"jobs[{index}].job_id must be a non-empty string")
         if job.job_id in seen:
             raise RankValidationError(f"duplicate job_id: {job.job_id!r}")
         seen.add(job.job_id)
@@ -100,18 +99,14 @@ def validate_jobs(jobs: Iterable[JobFeatures]) -> List[JobFeatures]:
         for feature in FEATURES:
             value = getattr(job, feature)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise RankValidationError(
-                    f"job {job.job_id!r} feature {feature} must be numeric"
-                )
+                raise RankValidationError(f"job {job.job_id!r} feature {feature} must be numeric")
             numeric = float(value)
             if not math.isfinite(numeric) or numeric <= 0:
                 raise RankValidationError(
                     f"job {job.job_id!r} feature {feature} must be finite and > 0"
                 )
         if not float(job.P).is_integer():
-            raise RankValidationError(
-                f"job {job.job_id!r} feature P must be a positive integer"
-            )
+            raise RankValidationError(f"job {job.job_id!r} feature P must be a positive integer")
     return validated
 
 
@@ -136,9 +131,7 @@ def validate_inference_jobs(
                 f"inference jobs[{index}] is not an InferenceFeatures instance"
             )
         if not isinstance(job.job_id, str) or not job.job_id.strip():
-            raise RankValidationError(
-                f"inference jobs[{index}].job_id must be a non-empty string"
-            )
+            raise RankValidationError(f"inference jobs[{index}].job_id must be a non-empty string")
         if job.job_id in seen:
             raise RankValidationError(f"duplicate job_id: {job.job_id!r}")
         seen.add(job.job_id)
@@ -151,15 +144,12 @@ def validate_inference_jobs(
             numeric = float(value)
             if not math.isfinite(numeric) or numeric <= 0:
                 raise RankValidationError(
-                    f"inference job {job.job_id!r} feature {feature} "
-                    "must be finite and > 0"
+                    f"inference job {job.job_id!r} feature {feature} must be finite and > 0"
                 )
     return validated
 
 
-def _minmax_normalize(
-    values: Mapping[str, float], larger_is_better: bool
-) -> Dict[str, float]:
+def _minmax_normalize(values: Mapping[str, float], larger_is_better: bool) -> Dict[str, float]:
     """Normalize one feature to ``[0, 1]`` with 1 always most desirable."""
 
     if not values:
@@ -182,16 +172,43 @@ def compute_ranks(jobs: Iterable[JobFeatures]) -> Dict[str, float]:
     normalized: Dict[str, Dict[str, float]] = {}
     for feature in FEATURES:
         raw = {job.job_id: float(getattr(job, feature)) for job in validated}
-        normalized[feature] = _minmax_normalize(
-            raw, larger_is_better=feature in LARGER_IS_BETTER
-        )
+        normalized[feature] = _minmax_normalize(raw, larger_is_better=feature in LARGER_IS_BETTER)
 
     return {
-        job.job_id: sum(
-            WEIGHTS[feature] * normalized[feature][job.job_id] for feature in FEATURES
-        )
+        job.job_id: sum(WEIGHTS[feature] * normalized[feature][job.job_id] for feature in FEATURES)
         for job in validated
     }
+
+
+def compute_duration_only_ranks(jobs: Iterable[JobFeatures]) -> Dict[str, float]:
+    """Return the burst-relative shortest-estimated-duration baseline.
+
+    This policy intentionally uses only ``T`` and exists as an explicit SPT/
+    weighted-SJF-style ablation.  It shares validation, normalization and tie
+    semantics with the six-feature policy so a live experiment can isolate
+    what the other five terms add instead of comparing unlike controllers.
+    """
+
+    validated = validate_jobs(jobs)
+    if not validated:
+        return {}
+    raw = {job.job_id: float(job.T) for job in validated}
+    return _minmax_normalize(raw, larger_is_better=False)
+
+
+def compute_training_ranks(
+    jobs: Iterable[JobFeatures], *, policy: str = "six_feature"
+) -> Dict[str, float]:
+    """Compute one of the registered training-ranking policies."""
+
+    materialized = list(jobs)
+    if policy == "six_feature":
+        return compute_ranks(materialized)
+    if policy == "duration_only":
+        return compute_duration_only_ranks(materialized)
+    raise RankValidationError(
+        f"unknown training rank policy {policy!r}; expected one of {TRAINING_RANK_POLICIES}"
+    )
 
 
 def compute_inference_ranks(
@@ -224,6 +241,8 @@ def compute_inference_ranks(
 
 def compute_workload_ranks(
     jobs: Iterable[WorkloadFeatures],
+    *,
+    training_policy: str = "six_feature",
 ) -> Dict[str, float]:
     """Dispatch to the article or inference policy for a homogeneous burst."""
 
@@ -232,12 +251,12 @@ def compute_workload_ranks(
         return {}
     kinds = {type(job) for job in materialized}
     if kinds == {JobFeatures}:
-        return compute_ranks(materialized)  # type: ignore[arg-type]
+        return compute_training_ranks(  # type: ignore[arg-type]
+            materialized, policy=training_policy
+        )
     if kinds == {InferenceFeatures}:
         return compute_inference_ranks(materialized)  # type: ignore[arg-type]
-    raise RankValidationError(
-        "a scheduling burst must not mix training and inference workloads"
-    )
+    raise RankValidationError("a scheduling burst must not mix training and inference workloads")
 
 
 TieBreaker = Callable[[JobFeatures], object]
@@ -271,6 +290,29 @@ def sort_by_rank(
     return [item[2] for item in decorated]
 
 
+def sort_by_training_policy(
+    jobs: Iterable[JobFeatures],
+    *,
+    policy: str = "six_feature",
+    reverse_order: bool = False,
+    tie_breaker: Optional[TieBreaker] = None,
+) -> List[JobFeatures]:
+    """Sort a training burst under a named, reproducible ranking policy."""
+
+    validated = validate_jobs(jobs)
+    ranks = compute_training_ranks(validated, policy=policy)
+    tie_breaker = tie_breaker or (lambda job: job.job_id)
+    decorated = []
+    for job in validated:
+        tie = tie_breaker(job)
+        if not isinstance(tie, tuple):
+            tie = (tie,)
+        rank_key = ranks[job.job_id] if reverse_order else -ranks[job.job_id]
+        decorated.append((rank_key, tie, job))
+    decorated.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in decorated]
+
+
 WorkloadTieBreaker = Callable[[WorkloadFeatures], object]
 
 
@@ -278,11 +320,12 @@ def sort_workloads_by_rank(
     jobs: Iterable[WorkloadFeatures],
     reverse_order: bool = False,
     tie_breaker: Optional[WorkloadTieBreaker] = None,
+    training_policy: str = "six_feature",
 ) -> List[WorkloadFeatures]:
     """Return deterministic policy-specific ordering for one homogeneous burst."""
 
     materialized = list(jobs)
-    ranks = compute_workload_ranks(materialized)
+    ranks = compute_workload_ranks(materialized, training_policy=training_policy)
     tie_breaker = tie_breaker or (lambda job: job.job_id)
     decorated = []
     for job in materialized:

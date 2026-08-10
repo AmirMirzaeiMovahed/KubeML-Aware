@@ -10,15 +10,19 @@ from .constants import (
     ANNOTATION_MAP,
     EXPECTED_COUNT_ANNOTATION,
     EXPECTED_JOBS_ANNOTATION,
+    FAST_PATH_ANNOTATION,
     FIXED_DELAY_ANNOTATION,
     INFERENCE_ANNOTATION_MAP,
     PACING_MODE_ANNOTATION,
+    RANK_POLICY_ANNOTATION,
     REVERSE_ANNOTATION,
     RUN_ID_ANNOTATION,
     RUN_ID_LABEL,
+    TAIL_BALANCE_ANNOTATION,
     WORKLOAD_KIND_ANNOTATION,
 )
 from .rank import (
+    TRAINING_RANK_POLICIES,
     InferenceFeatures,
     JobFeatures,
     RankValidationError,
@@ -43,6 +47,9 @@ class RunSettings:
     pacing_mode: str
     fixed_delay: float
     reverse: bool
+    rank_policy: str = "six_feature"
+    tail_balance: bool = True
+    fast_path_enabled: Optional[bool] = None
 
 
 def _metadata_map(pod: Any, field: str) -> Dict[str, str]:
@@ -56,9 +63,7 @@ def pod_run_id(pod: Any) -> Optional[str]:
     annotation_value = annotations.get(RUN_ID_ANNOTATION)
     if label_value and annotation_value and label_value != annotation_value:
         name = getattr(getattr(pod, "metadata", None), "name", "unknown")
-        raise AnnotationValidationError(
-            f"pod {name!r} has conflicting run-id label and annotation"
-        )
+        raise AnnotationValidationError(f"pod {name!r} has conflicting run-id label and annotation")
     value = label_value or annotation_value
     return value.strip() if isinstance(value, str) and value.strip() else None
 
@@ -100,14 +105,10 @@ def extract_features(pod: Any) -> WorkloadFeatures:
     values: Dict[str, float] = {}
     for feature, key in ANNOTATION_MAP.items():
         if key not in annotations:
-            raise AnnotationValidationError(
-                f"pod {name!r} is missing required annotation {key!r}"
-            )
+            raise AnnotationValidationError(f"pod {name!r} is missing required annotation {key!r}")
         raw = annotations[key]
         if isinstance(raw, bool):
-            raise AnnotationValidationError(
-                f"pod {name!r} annotation {key!r} must be numeric"
-            )
+            raise AnnotationValidationError(f"pod {name!r} annotation {key!r} must be numeric")
         try:
             values[feature] = float(raw)
         except (TypeError, ValueError) as exc:
@@ -174,9 +175,9 @@ def run_settings_for_pods(
                 f"run {run_id!r} has no expected-jobs annotation or CLI fallback"
             )
         expected = _parse_positive_int(expected_raw, EXPECTED_JOBS_ANNOTATION)
-        pacing_mode = str(
-            annotations.get(PACING_MODE_ANNOTATION, fallback_pacing_mode)
-        ).strip().lower()
+        pacing_mode = (
+            str(annotations.get(PACING_MODE_ANNOTATION, fallback_pacing_mode)).strip().lower()
+        )
         if pacing_mode not in {"none", "fixed", "adaptive"}:
             raise AnnotationValidationError(
                 f"{PACING_MODE_ANNOTATION} must be none, fixed, or adaptive"
@@ -185,23 +186,58 @@ def run_settings_for_pods(
         try:
             fixed_delay = float(fixed_raw)
         except (TypeError, ValueError) as exc:
-            raise AnnotationValidationError(
-                f"{FIXED_DELAY_ANNOTATION} must be numeric"
-            ) from exc
+            raise AnnotationValidationError(f"{FIXED_DELAY_ANNOTATION} must be numeric") from exc
         if fixed_delay < 0:
-            raise AnnotationValidationError(
-                f"{FIXED_DELAY_ANNOTATION} must be >= 0"
-            )
+            raise AnnotationValidationError(f"{FIXED_DELAY_ANNOTATION} must be >= 0")
         reverse = _parse_bool(
             annotations.get(REVERSE_ANNOTATION, fallback_reverse), REVERSE_ANNOTATION
         )
-        settings.add((expected, pacing_mode, fixed_delay, reverse))
+        rank_policy = str(annotations.get(RANK_POLICY_ANNOTATION, "six_feature")).strip().lower()
+        if rank_policy not in TRAINING_RANK_POLICIES:
+            raise AnnotationValidationError(
+                f"{RANK_POLICY_ANNOTATION} must be one of {TRAINING_RANK_POLICIES}"
+            )
+        tail_balance = _parse_bool(
+            annotations.get(TAIL_BALANCE_ANNOTATION, True), TAIL_BALANCE_ANNOTATION
+        )
+        fast_path_raw = annotations.get(FAST_PATH_ANNOTATION)
+        fast_path_enabled = (
+            None if fast_path_raw is None else _parse_bool(fast_path_raw, FAST_PATH_ANNOTATION)
+        )
+        settings.add(
+            (
+                expected,
+                pacing_mode,
+                fixed_delay,
+                reverse,
+                rank_policy,
+                tail_balance,
+                fast_path_enabled,
+            )
+        )
     if len(settings) != 1:
         raise AnnotationValidationError(
             f"run {run_id!r} contains inconsistent per-run scheduler annotations"
         )
-    expected, pacing_mode, fixed_delay, reverse = next(iter(settings))
-    return RunSettings(run_id, expected, pacing_mode, fixed_delay, reverse)
+    (
+        expected,
+        pacing_mode,
+        fixed_delay,
+        reverse,
+        rank_policy,
+        tail_balance,
+        fast_path_enabled,
+    ) = next(iter(settings))
+    return RunSettings(
+        run_id,
+        expected,
+        pacing_mode,
+        fixed_delay,
+        reverse,
+        rank_policy,
+        tail_balance,
+        fast_path_enabled,
+    )
 
 
 def group_pods_by_run(pods: Iterable[Any]) -> Dict[str, List[Any]]:
@@ -256,9 +292,7 @@ class BurstCollector:
         observed_names: List[str] = []
 
         while self.monotonic() < deadline:
-            matching = [
-                pod for pod in self.list_eligible_pods() if pod_run_id(pod) == run_id
-            ]
+            matching = [pod for pod in self.list_eligible_pods() if pod_run_id(pod) == run_id]
             matching.sort(key=lambda pod: pod_fingerprint(pod)[0])
             fingerprint = tuple(pod_fingerprint(pod) for pod in matching)
             now = self.monotonic()

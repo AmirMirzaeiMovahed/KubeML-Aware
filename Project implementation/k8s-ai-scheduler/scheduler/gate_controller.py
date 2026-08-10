@@ -163,9 +163,7 @@ class SchedulingGateController:
     def _has_gate(self, pod: Any) -> bool:
         return any(
             getattr(gate, "name", None) == self.gate_name
-            for gate in (
-                getattr(getattr(pod, "spec", None), "scheduling_gates", None) or []
-            )
+            for gate in (getattr(getattr(pod, "spec", None), "scheduling_gates", None) or [])
         )
 
     def _list_run_pods(self) -> List[Any]:
@@ -183,13 +181,10 @@ class SchedulingGateController:
             if getattr(getattr(pod, "spec", None), "scheduler_name", None)
             == self.config.scheduler_name
             and (
-                (getattr(getattr(pod, "metadata", None), "labels", None) or {}).get(
-                    RUN_ID_LABEL
+                (getattr(getattr(pod, "metadata", None), "labels", None) or {}).get(RUN_ID_LABEL)
+                or (getattr(getattr(pod, "metadata", None), "annotations", None) or {}).get(
+                    RUN_ID_ANNOTATION
                 )
-                or (
-                    getattr(getattr(pod, "metadata", None), "annotations", None)
-                    or {}
-                ).get(RUN_ID_ANNOTATION)
             )
         ]
 
@@ -244,6 +239,9 @@ class SchedulingGateController:
             "pacing_mode": settings.pacing_mode,
             "fixed_delay": settings.fixed_delay,
             "reverse": settings.reverse,
+            "rank_policy": settings.rank_policy,
+            "tail_balance_enabled": settings.tail_balance,
+            "run_fast_path_enabled": settings.fast_path_enabled,
             **self.config.runtime_metadata(),
         }
 
@@ -265,20 +263,15 @@ class SchedulingGateController:
             # Let process_run surface the exact unsafe-state error and persist
             # controller degradation instead of silently skipping the run.
             return None
-        observed = {
-            (str(pod.metadata.name), str(pod.metadata.uid)) for pod in pods
-        }
+        observed = {(str(pod.metadata.name), str(pod.metadata.uid)) for pod in pods}
         recorded = {
-            (str(record.get("job_id")), str(record.get("pod_uid")))
-            for record in store.records
+            (str(record.get("job_id")), str(record.get("pod_uid"))) for record in store.records
         }
         if observed != recorded:
             return None
         return store.status
 
-    def _discover_settings(
-        self, *, wait_forever: bool, one_shot: bool = False
-    ) -> RunSettings:
+    def _discover_settings(self, *, wait_forever: bool, one_shot: bool = False) -> RunSettings:
         deadline = None if wait_forever else self.monotonic() + self.config.burst_timeout
         while not self._stop and (deadline is None or self.monotonic() < deadline):
             valid_pods = []
@@ -288,9 +281,7 @@ class SchedulingGateController:
                 except AnnotationValidationError as exc:
                     name = getattr(getattr(pod, "metadata", None), "name", "unknown")
                     self._set_ready(False, f"invalid run identity on Pod {name}")
-                    self.logger.error(
-                        "run_discovery_rejected", pod_name=name, error=str(exc)
-                    )
+                    self.logger.error("run_discovery_rejected", pod_name=name, error=str(exc))
                     continue
                 valid_pods.append(pod)
             groups = group_pods_by_run(valid_pods)
@@ -324,13 +315,9 @@ class SchedulingGateController:
                         "ml_scheduler_failures_total",
                         labels={"stage": type(exc).__name__},
                     )
-                    self.logger.error(
-                        "run_discovery_rejected", run_id=run_id, error=str(exc)
-                    )
+                    self.logger.error("run_discovery_rejected", run_id=run_id, error=str(exc))
                     continue
-                persisted = self._persisted_candidate_status(
-                    settings, pods, one_shot=one_shot
-                )
+                persisted = self._persisted_candidate_status(settings, pods, one_shot=one_shot)
                 if persisted == "completed":
                     self._processed_runs.add(run_id)
                     continue
@@ -395,9 +382,7 @@ class SchedulingGateController:
             )
             if index is None:
                 return
-            resource_version = str(
-                getattr(getattr(pod, "metadata", None), "resource_version", "")
-            )
+            resource_version = str(getattr(getattr(pod, "metadata", None), "resource_version", ""))
             patch = [
                 {
                     "op": "test",
@@ -451,9 +436,7 @@ class SchedulingGateController:
         except InterruptedError as exc:
             raise ControllerStopping(str(exc)) from exc
 
-    def _wait_for_job_completion(
-        self, pod_name: str, *, container: str
-    ) -> JobCompletionResult:
+    def _wait_for_job_completion(self, pod_name: str, *, container: str) -> JobCompletionResult:
         try:
             return wait_for_job_completion(
                 self.v1,
@@ -488,12 +471,14 @@ class SchedulingGateController:
         def record_sample(sample: MetricsSample, age: float) -> None:
             self._on_metrics_sample(sample, age)
             if store is not None and sample.observed_at != last_recorded_timestamp[0]:
-                store.append_event({
-                    "event": "adaptive_metrics_sample",
-                    "utilization": sample.utilization,
-                    "observed_at": sample.observed_at,
-                    "age_seconds": age,
-                })
+                store.append_event(
+                    {
+                        "event": "adaptive_metrics_sample",
+                        "utilization": sample.utilization,
+                        "observed_at": sample.observed_at,
+                        "age_seconds": age,
+                    }
+                )
                 last_recorded_timestamp[0] = sample.observed_at
 
         return Pacer(
@@ -537,14 +522,19 @@ class SchedulingGateController:
         jobs: Sequence[Any],
         settings: RunSettings,
     ) -> FastPathDecision:
+        enabled = (
+            self.config.fast_path_enabled
+            if settings.fast_path_enabled is None
+            else settings.fast_path_enabled
+        )
         feedback = None
-        if self.config.fast_path_enabled:
+        if enabled:
             try:
                 feedback = self._ensure_feedback()
             except Exception as exc:
                 self.logger.warning("fast_path_feedback_unavailable", error=str(exc))
         policy = TrainingFastPathPolicy(
-            enabled=self.config.fast_path_enabled,
+            enabled=enabled,
             cpu_threshold=self.config.fast_path_cpu_threshold,
             metrics_max_age=self.config.metrics_max_age,
             wall_time=self.wall_time,
@@ -558,7 +548,9 @@ class SchedulingGateController:
         )
 
     def _results_path(self, run_id: str, *, one_shot: bool) -> str:
-        safe = "".join(character if character.isalnum() or character in "-_." else "_" for character in run_id)
+        safe = "".join(
+            character if character.isalnum() or character in "-_." else "_" for character in run_id
+        )
         if "{run_id}" in self.config.results_path:
             return self.config.results_path.format(run_id=safe)
         if one_shot:
@@ -572,12 +564,13 @@ class SchedulingGateController:
         self.metrics.set("ml_scheduler_burst_jobs", len(pods), {"run_id": settings.run_id})
         pods_by_name = {pod.metadata.name: pod for pod in pods}
         jobs = [extract_features(pod) for pod in pods]
-        ranks = compute_workload_ranks(jobs)
+        ranks = compute_workload_ranks(jobs, training_policy=settings.rank_policy)
         tie_keys = {pod.metadata.name: self._pod_order_key(pod) for pod in pods}
         ordered = sort_workloads_by_rank(
             jobs,
             reverse_order=settings.reverse,
             tie_breaker=lambda job: tie_keys[job.job_id],
+            training_policy=settings.rank_policy,
         )
         expected_records = [
             ScheduleRecord(
@@ -613,9 +606,7 @@ class SchedulingGateController:
                     existing.rank,
                     existing.pod_uid,
                 ) != (expected.order, expected.rank, expected.pod_uid):
-                    raise RecordStoreError(
-                        f"persisted record drift for {existing.job_id!r}"
-                    )
+                    raise RecordStoreError(f"persisted record drift for {existing.job_id!r}")
                 if existing.status not in {
                     "ranked",
                     "releasing",
@@ -628,27 +619,26 @@ class SchedulingGateController:
                     )
                 existing_by_job[existing.job_id] = existing
             records = [
-                existing_by_job.get(expected.job_id, expected)
-                for expected in expected_records
+                existing_by_job.get(expected.job_id, expected) for expected in expected_records
             ]
             store.set_status("running")
             for record in records:
                 store.upsert(record)
-            store.append_event({
-                "event": "controller_resumed",
-                "run_id": settings.run_id,
-                "timestamp": self.wall_time(),
-                "completed_jobs": sum(
-                    record.status in {"execution_started", "completed"}
-                    for record in records
-                ),
-            })
+            store.append_event(
+                {
+                    "event": "controller_resumed",
+                    "run_id": settings.run_id,
+                    "timestamp": self.wall_time(),
+                    "completed_jobs": sum(
+                        record.status in {"execution_started", "completed"} for record in records
+                    ),
+                }
+            )
             self.logger.info(
                 "run_resumed",
                 run_id=settings.run_id,
                 completed_jobs=sum(
-                    record.status in {"execution_started", "completed"}
-                    for record in records
+                    record.status in {"execution_started", "completed"} for record in records
                 ),
             )
         else:
@@ -669,11 +659,7 @@ class SchedulingGateController:
             )
         records_by_job = {record.job_id: record for record in records}
         prior_fast_path = next(
-            (
-                event
-                for event in store.events
-                if event.get("event") == "fast_path_decision"
-            ),
+            (event for event in store.events if event.get("event") == "fast_path_decision"),
             None,
         )
         if prior_fast_path is None:
@@ -733,8 +719,7 @@ class SchedulingGateController:
         )
         if not 1 <= headroom_release_count <= initial_release_count:
             raise RecordStoreError(
-                "invalid persisted fast-path headroom release count: "
-                f"{headroom_release_count}"
+                f"invalid persisted fast-path headroom release count: {headroom_release_count}"
             )
         self.metrics.inc(
             "ml_scheduler_fast_path_decisions_total",
@@ -742,6 +727,7 @@ class SchedulingGateController:
         )
         pacer = self._pacer(settings, store=store)
         try:
+
             def release_job(job: Any, record: ScheduleRecord) -> None:
                 pod = pods_by_name[job.job_id]
                 if record.status in {
@@ -755,9 +741,7 @@ class SchedulingGateController:
                 if record.status in {"execution_started", "completed"}:
                     return
                 if resumed and record.status == "ranked" and not self._has_gate(pod):
-                    raise RecordStoreError(
-                        f"unrecorded external gate removal for {job.job_id!r}"
-                    )
+                    raise RecordStoreError(f"unrecorded external gate removal for {job.job_id!r}")
                 if self._stop:
                     raise ControllerStopping("shutdown requested before gate removal")
                 if self._has_gate(pod):
@@ -780,11 +764,13 @@ class SchedulingGateController:
                         record.release_time = self.wall_time()
                     record.status = "released"
                     store.upsert(record)
-                    store.append_event({
-                        "event": "release_reconciled_after_restart",
-                        "job_id": job.job_id,
-                        "timestamp": self.wall_time(),
-                    })
+                    store.append_event(
+                        {
+                            "event": "release_reconciled_after_restart",
+                            "job_id": job.job_id,
+                            "timestamp": self.wall_time(),
+                        }
+                    )
 
             def confirm_execution(job: Any, record: ScheduleRecord) -> None:
                 if record.status in {"execution_started", "completed"}:
@@ -809,24 +795,22 @@ class SchedulingGateController:
             if (
                 fast_path_reason == "ranked_queue_prefill"
                 and headroom_release_count >= 2
+                and settings.tail_balance
                 and all(isinstance(job, JobFeatures) for job in ordered)
             ):
                 release_order, tail_plan = balance_training_tail(
                     ordered,
                     parallelism=headroom_release_count,
-                    protected_prefix=min(
-                        len(ordered), headroom_release_count + 1
-                    ),
+                    protected_prefix=min(len(ordered), headroom_release_count + 1),
                 )
-                if not any(
-                    event.get("event") == "training_tail_balance"
-                    for event in store.events
-                ):
-                    store.append_event({
-                        "event": "training_tail_balance",
-                        **tail_plan,
-                        "timestamp": self.wall_time(),
-                    })
+                if not any(event.get("event") == "training_tail_balance" for event in store.events):
+                    store.append_event(
+                        {
+                            "event": "training_tail_balance",
+                            **tail_plan,
+                            "timestamp": self.wall_time(),
+                        }
+                    )
             initial_jobs = list(release_order[:initial_release_count])
             initial_ids = {job.job_id for job in initial_jobs}
             for job in initial_jobs:
@@ -850,42 +834,50 @@ class SchedulingGateController:
                         for event in store.events
                     )
                     if not pacing_done:
-                        store.append_event({
-                            "event": "pacing_wait_started",
-                            "after_job_id": previous,
-                            "before_job_id": job.job_id,
-                            "mode": settings.pacing_mode,
-                            "fixed_delay_seconds": settings.fixed_delay,
-                            "timestamp": self.wall_time(),
-                        })
+                        store.append_event(
+                            {
+                                "event": "pacing_wait_started",
+                                "after_job_id": previous,
+                                "before_job_id": job.job_id,
+                                "mode": settings.pacing_mode,
+                                "fixed_delay_seconds": settings.fixed_delay,
+                                "timestamp": self.wall_time(),
+                            }
+                        )
                         try:
                             pacer.wait()
                         except PacingInterrupted as exc:
-                            store.append_event({
-                                "event": "pacing_wait_interrupted",
-                                "after_job_id": previous,
-                                "before_job_id": job.job_id,
-                                "mode": settings.pacing_mode,
-                                "timestamp": self.wall_time(),
-                            })
+                            store.append_event(
+                                {
+                                    "event": "pacing_wait_interrupted",
+                                    "after_job_id": previous,
+                                    "before_job_id": job.job_id,
+                                    "mode": settings.pacing_mode,
+                                    "timestamp": self.wall_time(),
+                                }
+                            )
                             raise ControllerStopping(str(exc)) from exc
                         except Exception as exc:
-                            store.append_event({
-                                "event": "pacing_wait_failed",
+                            store.append_event(
+                                {
+                                    "event": "pacing_wait_failed",
+                                    "after_job_id": previous,
+                                    "before_job_id": job.job_id,
+                                    "mode": settings.pacing_mode,
+                                    "timestamp": self.wall_time(),
+                                    "error": str(exc),
+                                }
+                            )
+                            raise
+                        store.append_event(
+                            {
+                                "event": "pacing_wait_completed",
                                 "after_job_id": previous,
                                 "before_job_id": job.job_id,
                                 "mode": settings.pacing_mode,
                                 "timestamp": self.wall_time(),
-                                "error": str(exc),
-                            })
-                            raise
-                        store.append_event({
-                            "event": "pacing_wait_completed",
-                            "after_job_id": previous,
-                            "before_job_id": job.job_id,
-                            "mode": settings.pacing_mode,
-                            "timestamp": self.wall_time(),
-                        })
+                            }
+                        )
                 release_job(job, record)
                 confirm_execution(job, record)
             for job in initial_jobs:
@@ -904,17 +896,17 @@ class SchedulingGateController:
                     )
                 pod = pods_by_name[job.job_id]
                 container = execution_container_for_pod(pod)
-                completion = self._wait_for_job_completion(
-                    job.job_id, container=container
+                completion = self._wait_for_job_completion(job.job_id, container=container)
+                store.append_event(
+                    {
+                        "event": "job_completion_observed",
+                        "job_id": job.job_id,
+                        "success": completion.success,
+                        "reason": completion.reason,
+                        "completion_timestamp": completion.timestamp,
+                        "timestamp": self.wall_time(),
+                    }
                 )
-                store.append_event({
-                    "event": "job_completion_observed",
-                    "job_id": job.job_id,
-                    "success": completion.success,
-                    "reason": completion.reason,
-                    "completion_timestamp": completion.timestamp,
-                    "timestamp": self.wall_time(),
-                })
                 if completion.failed:
                     record.status = "failed"
                     record.error = completion.reason
@@ -923,9 +915,7 @@ class SchedulingGateController:
                         "ml_scheduler_job_failures_total",
                         labels={"profile": "scheduling-gate"},
                     )
-                    raise GateReleaseError(
-                        f"job {job.job_id!r} failed: {completion.reason}"
-                    )
+                    raise GateReleaseError(f"job {job.job_id!r} failed: {completion.reason}")
                 record.status = "completed"
                 store.upsert(record)
             store.set_status("completed")
@@ -940,11 +930,13 @@ class SchedulingGateController:
             )
             return records
         except ControllerStopping:
-            store.append_event({
-                "event": "controller_stopped",
-                "run_id": settings.run_id,
-                "timestamp": self.wall_time(),
-            })
+            store.append_event(
+                {
+                    "event": "controller_stopped",
+                    "run_id": settings.run_id,
+                    "timestamp": self.wall_time(),
+                }
+            )
             raise
         except Exception as exc:
             current = next(
@@ -958,9 +950,7 @@ class SchedulingGateController:
             store.set_status("failed", str(exc))
             self._failed_runs.add(settings.run_id)
             self._set_ready(False, f"run {settings.run_id} failed: {type(exc).__name__}")
-            self.metrics.inc(
-                "ml_scheduler_failures_total", labels={"stage": type(exc).__name__}
-            )
+            self.metrics.inc("ml_scheduler_failures_total", labels={"stage": type(exc).__name__})
             self.logger.error(
                 "run_failed",
                 run_id=settings.run_id,
@@ -1002,9 +992,7 @@ class SchedulingGateController:
     ) -> None:
         path = self._results_path(settings.run_id, one_shot=one_shot)
         if not os.path.exists(path):
-            store = AtomicRecordStore(
-                path, metadata=self._record_metadata(settings)
-            )
+            store = AtomicRecordStore(path, metadata=self._record_metadata(settings))
             store.initialize()
             store.set_status("failed", str(exc))
             self.metrics.inc(
@@ -1061,7 +1049,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="batch-release a training burst only when fresh CPU headroom can fit it",
     )
     parser.add_argument("--fast-path-cpu-threshold", type=float, default=0.80)
-    parser.add_argument("--quiet-period", "--burst-window", dest="quiet_period", type=float, default=1.5)
+    parser.add_argument(
+        "--quiet-period", "--burst-window", dest="quiet_period", type=float, default=1.5
+    )
     parser.add_argument("--burst-timeout", type=float, default=120.0)
     parser.add_argument("--poll-interval", type=float, default=0.5)
     parser.add_argument("--execution-timeout", type=float, default=120.0)

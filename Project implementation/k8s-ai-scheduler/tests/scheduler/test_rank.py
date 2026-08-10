@@ -3,13 +3,17 @@ import math
 import pytest
 
 from scheduler.rank import (
+    WEIGHTS,
     InferenceFeatures,
     JobFeatures,
     RankValidationError,
+    compute_duration_only_ranks,
     compute_inference_ranks,
     compute_ranks,
+    compute_training_ranks,
     compute_workload_ranks,
     sort_by_rank,
+    sort_by_training_policy,
     sort_workloads_by_rank,
 )
 
@@ -21,10 +25,29 @@ def job(job_id, **overrides):
 
 
 def test_exact_paper_weights_and_directions():
+    assert sum(WEIGHTS.values()) == pytest.approx(1.0)
     best = job("best", T=1, R=9, M=1, G=1, C=9, P=1)
     worst = job("worst", T=9, R=1, M=9, G=9, C=1, P=9)
     ranks = compute_ranks([best, worst])
     assert ranks == {"best": pytest.approx(1), "worst": pytest.approx(0.0)}
+
+
+def test_duration_only_policy_is_an_explicit_spt_baseline():
+    jobs = [job("long", T=30), job("short", T=5), job("middle", T=10)]
+    ranks = compute_duration_only_ranks(jobs)
+    assert ranks["short"] == pytest.approx(1.0)
+    assert ranks["long"] == pytest.approx(0.0)
+    assert [item.job_id for item in sort_by_training_policy(jobs, policy="duration_only")] == [
+        "short",
+        "middle",
+        "long",
+    ]
+    assert compute_training_ranks(jobs, policy="six_feature") == compute_ranks(jobs)
+
+
+def test_unknown_training_policy_fails_closed():
+    with pytest.raises(RankValidationError, match="unknown training rank policy"):
+        compute_training_ranks([job("a")], policy="oracle")
 
 
 def test_identical_features_are_neutral_and_ties_are_deterministic():
@@ -32,17 +55,17 @@ def test_identical_features_are_neutral_and_ties_are_deterministic():
     assert ranks["z"] == pytest.approx(0.5)
     assert ranks["a"] == pytest.approx(0.5)
     assert [item.job_id for item in sort_by_rank([job("z"), job("a")])] == ["a", "z"]
-    assert [
-        item.job_id for item in sort_by_rank([job("z"), job("a")], reverse_order=True)
-    ] == ["a", "z"]
+    assert [item.job_id for item in sort_by_rank([job("z"), job("a")], reverse_order=True)] == [
+        "a",
+        "z",
+    ]
 
 
 def test_explicit_tie_breaker_is_used_without_reversing_ties():
     jobs = [job("a"), job("b")]
     keys = {"a": (2, "a"), "b": (1, "b")}
     assert [
-        item.job_id
-        for item in sort_by_rank(jobs, tie_breaker=lambda item: keys[item.job_id])
+        item.job_id for item in sort_by_rank(jobs, tie_breaker=lambda item: keys[item.job_id])
     ] == ["b", "a"]
 
 
