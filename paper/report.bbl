@@ -1,0 +1,956 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global/global}
+    \entry{abdelshaheed2025intelligent}{inproceedings}{}{}
+      \name{author}{2}{}{%
+        {{hash=27a948c1363cda11bb09a39190c02e2e}{%
+           family={Abdelshaheed},
+           familyi={A\bibinitperiod},
+           given={Michael},
+           giveni={M\bibinitperiod}}}%
+        {{hash=79b312d6e1ce12b7b8bfe08110f582d2}{%
+           family={Ashour},
+           familyi={A\bibinitperiod},
+           given={Mohamed},
+           giveni={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{fe983a6c14d3b17e704ac41bbc0af966}
+      \strng{fullhash}{fe983a6c14d3b17e704ac41bbc0af966}
+      \strng{fullhashraw}{fe983a6c14d3b17e704ac41bbc0af966}
+      \strng{bibnamehash}{fe983a6c14d3b17e704ac41bbc0af966}
+      \strng{authorbibnamehash}{fe983a6c14d3b17e704ac41bbc0af966}
+      \strng{authornamehash}{fe983a6c14d3b17e704ac41bbc0af966}
+      \strng{authorfullhash}{fe983a6c14d3b17e704ac41bbc0af966}
+      \strng{authorfullhashraw}{fe983a6c14d3b17e704ac41bbc0af966}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 35th International Conference on Computer Theory and Applications (ICCTA)}
+      \field{title}{Intelligent Scheduling of {AI} Tasks in {Kubernetes}}
+      \field{year}{2025}
+      \true{nocite}
+      \field{pages}{24\bibrangedash 31}
+      \range{pages}{8}
+      \verb{doi}
+      \verb 10.1109/ICCTA68914.2025.11519965
+      \endverb
+    \endentry
+    \entry{weng2022mlaas}{inproceedings}{}{}
+      \name{author}{10}{}{%
+        {{hash=a07d41ff00061383e72e78eda5133419}{%
+           family={Weng},
+           familyi={W\bibinitperiod},
+           given={Qizhen},
+           giveni={Q\bibinitperiod}}}%
+        {{hash=d7fd4580156e990d082ccd1e17c106b6}{%
+           family={Xiao},
+           familyi={X\bibinitperiod},
+           given={Wencong},
+           giveni={W\bibinitperiod}}}%
+        {{hash=84933e5687fa002e0f22b212c4308c43}{%
+           family={Yu},
+           familyi={Y\bibinitperiod},
+           given={Yinghao},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=f27ec46ccd272a021fd78bdac92dd490}{%
+           family={Wang},
+           familyi={W\bibinitperiod},
+           given={Wei},
+           giveni={W\bibinitperiod}}}%
+        {{hash=f21a8e1746c7e003133037dc9888a372}{%
+           family={Wang},
+           familyi={W\bibinitperiod},
+           given={Cheng},
+           giveni={C\bibinitperiod}}}%
+        {{hash=1e36cf76c83800aa7f775cb1acfad840}{%
+           family={He},
+           familyi={H\bibinitperiod},
+           given={Jian},
+           giveni={J\bibinitperiod}}}%
+        {{hash=78be8ea0cb80e4e1b59bf06100942e90}{%
+           family={Li},
+           familyi={L\bibinitperiod},
+           given={Yong},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=bc948bcf523b83a8724c7ec20d7957d0}{%
+           family={Zhang},
+           familyi={Z\bibinitperiod},
+           given={Liping},
+           giveni={L\bibinitperiod}}}%
+        {{hash=4a5c69e514f00961901616047782d0d6}{%
+           family={Lin},
+           familyi={L\bibinitperiod},
+           given={Wei},
+           giveni={W\bibinitperiod}}}%
+        {{hash=0fc5e28ee7689726bb9cdb67c1609e80}{%
+           family={Ding},
+           familyi={D\bibinitperiod},
+           given={Yu},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {USENIX Association}%
+      }
+      \strng{namehash}{45cac948205c12bffd1f8bbde2d351d2}
+      \strng{fullhash}{7bc956d1168a37d88cd6456594fd6aa1}
+      \strng{fullhashraw}{7bc956d1168a37d88cd6456594fd6aa1}
+      \strng{bibnamehash}{45cac948205c12bffd1f8bbde2d351d2}
+      \strng{authorbibnamehash}{45cac948205c12bffd1f8bbde2d351d2}
+      \strng{authornamehash}{45cac948205c12bffd1f8bbde2d351d2}
+      \strng{authorfullhash}{7bc956d1168a37d88cd6456594fd6aa1}
+      \strng{authorfullhashraw}{7bc956d1168a37d88cd6456594fd6aa1}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{19th USENIX Symposium on Networked Systems Design and Implementation (NSDI 22)}
+      \field{title}{{MLaaS} in the Wild: Workload Analysis and Scheduling in Large-Scale Heterogeneous {GPU} Clusters}
+      \field{year}{2022}
+      \true{nocite}
+      \field{pages}{945\bibrangedash 960}
+      \range{pages}{16}
+    \endentry
+    \entry{alhakimi2026review}{article}{}{}
+      \name{author}{2}{}{%
+        {{hash=1dca238ce9f189ddfb3fbb4a1da3f493}{%
+           family={Alhakimi},
+           familyi={A\bibinitperiod},
+           given={Mohammed},
+           giveni={M\bibinitperiod}}}%
+        {{hash=65a03c5cf294d9b6da970cc6dedb0672}{%
+           family={Latip},
+           familyi={L\bibinitperiod},
+           given={Rohaya},
+           giveni={R\bibinitperiod}}}%
+      }
+      \strng{namehash}{a3016ce9ab8f0b553ef57929feed73b5}
+      \strng{fullhash}{a3016ce9ab8f0b553ef57929feed73b5}
+      \strng{fullhashraw}{a3016ce9ab8f0b553ef57929feed73b5}
+      \strng{bibnamehash}{a3016ce9ab8f0b553ef57929feed73b5}
+      \strng{authorbibnamehash}{a3016ce9ab8f0b553ef57929feed73b5}
+      \strng{authornamehash}{a3016ce9ab8f0b553ef57929feed73b5}
+      \strng{authorfullhash}{a3016ce9ab8f0b553ef57929feed73b5}
+      \strng{authorfullhashraw}{a3016ce9ab8f0b553ef57929feed73b5}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Computers}
+      \field{number}{7}
+      \field{title}{Enhancing the {Kubernetes} Scheduler: A State-of-the-Art Review from Cloud to Edge}
+      \field{volume}{15}
+      \field{year}{2026}
+      \true{nocite}
+      \field{pages}{458}
+      \range{pages}{1}
+      \verb{doi}
+      \verb 10.3390/computers15070458
+      \endverb
+    \endentry
+    \entry{kubernetesSchedulingFramework}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=97d5f1c7ec302d71272e93170d6ec381}{%
+           family={{Kubernetes Authors}},
+           familyi={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{bibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorbibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authornamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \field{extraname}{1}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Kubernetes Documentation}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{Scheduling Framework}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/
+      \endverb
+      \verb{url}
+      \verb https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/
+      \endverb
+    \endentry
+    \entry{kubernetesSchedulingReadiness}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=97d5f1c7ec302d71272e93170d6ec381}{%
+           family={{Kubernetes Authors}},
+           familyi={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{bibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorbibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authornamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \field{extraname}{2}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Kubernetes Documentation}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{Pod Scheduling Readiness}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/
+      \endverb
+      \verb{url}
+      \verb https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/
+      \endverb
+    \endentry
+    \entry{kubernetesMetrics}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=97d5f1c7ec302d71272e93170d6ec381}{%
+           family={{Kubernetes Authors}},
+           familyi={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{bibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorbibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authornamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \field{extraname}{3}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Kubernetes Documentation}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{Resource Metrics Pipeline}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/
+      \endverb
+      \verb{url}
+      \verb https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/
+      \endverb
+    \endentry
+    \entry{kubernetesWorkloadAPI}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=97d5f1c7ec302d71272e93170d6ec381}{%
+           family={{Kubernetes Authors}},
+           familyi={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{fullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{bibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorbibnamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authornamehash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhash}{97d5f1c7ec302d71272e93170d6ec381}
+      \strng{authorfullhashraw}{97d5f1c7ec302d71272e93170d6ec381}
+      \field{extraname}{4}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Kubernetes Documentation}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{Workload {API}}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://kubernetes.io/docs/concepts/workloads/workload-api/
+      \endverb
+      \verb{url}
+      \verb https://kubernetes.io/docs/concepts/workloads/workload-api/
+      \endverb
+    \endentry
+    \entry{gu2019tiresias}{inproceedings}{}{}
+      \name{author}{8}{}{%
+        {{hash=ec2f6182d374cad457a59eaf328b1260}{%
+           family={Gu},
+           familyi={G\bibinitperiod},
+           given={Juncheng},
+           giveni={J\bibinitperiod}}}%
+        {{hash=c5a8ae0d5f065be17aae440a9eb11c79}{%
+           family={Chowdhury},
+           familyi={C\bibinitperiod},
+           given={Mosharaf},
+           giveni={M\bibinitperiod}}}%
+        {{hash=163411def426f522803d5a27828d3b8d}{%
+           family={Shin},
+           familyi={S\bibinitperiod},
+           given={Kang\bibnamedelima G.},
+           giveni={K\bibinitperiod\bibinitdelim G\bibinitperiod}}}%
+        {{hash=e67e408c1c62ac382d64e391f00a5dde}{%
+           family={Zhu},
+           familyi={Z\bibinitperiod},
+           given={Yibo},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=2442247634b461aeb0ca8524a41d64a4}{%
+           family={Jeon},
+           familyi={J\bibinitperiod},
+           given={Myeongjae},
+           giveni={M\bibinitperiod}}}%
+        {{hash=0c1f2e79aa258e17bee6f357dfb5a606}{%
+           family={Qian},
+           familyi={Q\bibinitperiod},
+           given={Junjie},
+           giveni={J\bibinitperiod}}}%
+        {{hash=fab1741b4d5a25d98230baedb1ed5bff}{%
+           family={Liu},
+           familyi={L\bibinitperiod},
+           given={Hongqiang},
+           giveni={H\bibinitperiod}}}%
+        {{hash=69614a28ea51025c2a17e777a17632d4}{%
+           family={Guo},
+           familyi={G\bibinitperiod},
+           given={Chuanxiong},
+           giveni={C\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {USENIX Association}%
+      }
+      \strng{namehash}{ceaa69b0d101bdb250a34b8150df4c2d}
+      \strng{fullhash}{66b93016958ff9ac6298d47e17cde928}
+      \strng{fullhashraw}{66b93016958ff9ac6298d47e17cde928}
+      \strng{bibnamehash}{ceaa69b0d101bdb250a34b8150df4c2d}
+      \strng{authorbibnamehash}{ceaa69b0d101bdb250a34b8150df4c2d}
+      \strng{authornamehash}{ceaa69b0d101bdb250a34b8150df4c2d}
+      \strng{authorfullhash}{66b93016958ff9ac6298d47e17cde928}
+      \strng{authorfullhashraw}{66b93016958ff9ac6298d47e17cde928}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{16th USENIX Symposium on Networked Systems Design and Implementation (NSDI 19)}
+      \field{title}{Tiresias: A {GPU} Cluster Manager for Distributed Deep Learning}
+      \field{year}{2019}
+      \true{nocite}
+      \field{pages}{485\bibrangedash 500}
+      \range{pages}{16}
+    \endentry
+    \entry{xiao2018gandiva}{inproceedings}{}{}
+      \name{author}{12}{}{%
+        {{hash=d7fd4580156e990d082ccd1e17c106b6}{%
+           family={Xiao},
+           familyi={X\bibinitperiod},
+           given={Wencong},
+           giveni={W\bibinitperiod}}}%
+        {{hash=09577c446fcfacbd381b3cfce459506b}{%
+           family={Bhardwaj},
+           familyi={B\bibinitperiod},
+           given={Romil},
+           giveni={R\bibinitperiod}}}%
+        {{hash=3923d8fff2274b23b01d26afb5014935}{%
+           family={Ramjee},
+           familyi={R\bibinitperiod},
+           given={Ramachandran},
+           giveni={R\bibinitperiod}}}%
+        {{hash=36472783d3133d764946dc59aa0463a8}{%
+           family={Sivathanu},
+           familyi={S\bibinitperiod},
+           given={Muthian},
+           giveni={M\bibinitperiod}}}%
+        {{hash=52efc9b8c21f3dc565e5dc958079bdb0}{%
+           family={Kwatra},
+           familyi={K\bibinitperiod},
+           given={Nipun},
+           giveni={N\bibinitperiod}}}%
+        {{hash=ad3303166b7bdca2c0a3794e99cf8670}{%
+           family={Han},
+           familyi={H\bibinitperiod},
+           given={Zhenhua},
+           giveni={Z\bibinitperiod}}}%
+        {{hash=7744790345876a0755d5a5c486ff7369}{%
+           family={Patel},
+           familyi={P\bibinitperiod},
+           given={Pratyush},
+           giveni={P\bibinitperiod}}}%
+        {{hash=e6d88250a21bd775e5ebde98174061df}{%
+           family={Peng},
+           familyi={P\bibinitperiod},
+           given={Xuan},
+           giveni={X\bibinitperiod}}}%
+        {{hash=6e5f863276b6d1e9c77c19d42e9cc1ef}{%
+           family={Zhao},
+           familyi={Z\bibinitperiod},
+           given={Hanyu},
+           giveni={H\bibinitperiod}}}%
+        {{hash=7657b805b67ace8d48ba98dc1b8cf442}{%
+           family={Zhang},
+           familyi={Z\bibinitperiod},
+           given={Quanlu},
+           giveni={Q\bibinitperiod}}}%
+        {{hash=bac6a7a5d8c835c2ebe5288a6fe722b4}{%
+           family={Yang},
+           familyi={Y\bibinitperiod},
+           given={Fan},
+           giveni={F\bibinitperiod}}}%
+        {{hash=e93cb68b77ead87355fd8fcb65dfb29a}{%
+           family={Zhou},
+           familyi={Z\bibinitperiod},
+           given={Lidong},
+           giveni={L\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {USENIX Association}%
+      }
+      \strng{namehash}{e0941f16465f9f00ec6fd462a17c9b97}
+      \strng{fullhash}{3f340eb9449a537a54e666a54d55b05c}
+      \strng{fullhashraw}{3f340eb9449a537a54e666a54d55b05c}
+      \strng{bibnamehash}{e0941f16465f9f00ec6fd462a17c9b97}
+      \strng{authorbibnamehash}{e0941f16465f9f00ec6fd462a17c9b97}
+      \strng{authornamehash}{e0941f16465f9f00ec6fd462a17c9b97}
+      \strng{authorfullhash}{3f340eb9449a537a54e666a54d55b05c}
+      \strng{authorfullhashraw}{3f340eb9449a537a54e666a54d55b05c}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{13th USENIX Symposium on Operating Systems Design and Implementation (OSDI 18)}
+      \field{title}{Gandiva: Introspective Cluster Scheduling for Deep Learning}
+      \field{year}{2018}
+      \true{nocite}
+      \field{pages}{595\bibrangedash 610}
+      \range{pages}{16}
+    \endentry
+    \entry{subramanya2023sia}{inproceedings}{}{}
+      \name{author}{6}{}{%
+        {{hash=3bd0c9f63d0d3450c825f344a034ee95}{%
+           family={Subramanya},
+           familyi={S\bibinitperiod},
+           given={Suhas\bibnamedelima Jayaram},
+           giveni={S\bibinitperiod\bibinitdelim J\bibinitperiod}}}%
+        {{hash=d4e8d0d4cf843b3063863dc0c2dc73e0}{%
+           family={Arfeen},
+           familyi={A\bibinitperiod},
+           given={Daiyaan},
+           giveni={D\bibinitperiod}}}%
+        {{hash=d4374a0ec68266843b759613ec7c8fd9}{%
+           family={Lin},
+           familyi={L\bibinitperiod},
+           given={Shouxu},
+           giveni={S\bibinitperiod}}}%
+        {{hash=69df41a405133ae18f34920853e81c6d}{%
+           family={Qiao},
+           familyi={Q\bibinitperiod},
+           given={Aurick},
+           giveni={A\bibinitperiod}}}%
+        {{hash=fe67566b4c6dbc3d7ab8a72bbf04cf01}{%
+           family={Jia},
+           familyi={J\bibinitperiod},
+           given={Zhihao},
+           giveni={Z\bibinitperiod}}}%
+        {{hash=c088fc39c55370692d55699c15dd1ffb}{%
+           family={Ganger},
+           familyi={G\bibinitperiod},
+           given={Gregory\bibnamedelima R.},
+           giveni={G\bibinitperiod\bibinitdelim R\bibinitperiod}}}%
+      }
+      \strng{namehash}{9ff937a31fe4bf184aedd1b16af09742}
+      \strng{fullhash}{05f5621736813ebc6d85422633699782}
+      \strng{fullhashraw}{05f5621736813ebc6d85422633699782}
+      \strng{bibnamehash}{05f5621736813ebc6d85422633699782}
+      \strng{authorbibnamehash}{05f5621736813ebc6d85422633699782}
+      \strng{authornamehash}{9ff937a31fe4bf184aedd1b16af09742}
+      \strng{authorfullhash}{05f5621736813ebc6d85422633699782}
+      \strng{authorfullhashraw}{05f5621736813ebc6d85422633699782}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of the 29th Symposium on Operating Systems Principles}
+      \field{title}{Sia: Heterogeneity-Aware, Goodput-Optimized {ML}-Cluster Scheduling}
+      \field{year}{2023}
+      \true{nocite}
+      \field{pages}{642\bibrangedash 657}
+      \range{pages}{16}
+      \verb{doi}
+      \verb 10.1145/3600006.3613175
+      \endverb
+    \endentry
+    \entry{zheng2023shockwave}{inproceedings}{}{}
+      \name{author}{5}{}{%
+        {{hash=2ec728090c5b541078134f4d67c38a9a}{%
+           family={Zheng},
+           familyi={Z\bibinitperiod},
+           given={Pengfei},
+           giveni={P\bibinitperiod}}}%
+        {{hash=831f24760397af13941a5027ba822566}{%
+           family={Pan},
+           familyi={P\bibinitperiod},
+           given={Rui},
+           giveni={R\bibinitperiod}}}%
+        {{hash=c04bade1082b0018a3f04ca775762145}{%
+           family={Khan},
+           familyi={K\bibinitperiod},
+           given={Tarannum},
+           giveni={T\bibinitperiod}}}%
+        {{hash=721534f33cd88b3753e3bb459468783f}{%
+           family={Venkataraman},
+           familyi={V\bibinitperiod},
+           given={Shivaram},
+           giveni={S\bibinitperiod}}}%
+        {{hash=e0f924d882649acf998332fe435297e7}{%
+           family={Akella},
+           familyi={A\bibinitperiod},
+           given={Aditya},
+           giveni={A\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {USENIX Association}%
+      }
+      \strng{namehash}{4dc2c7e5cf26656fef590eadcfd8465c}
+      \strng{fullhash}{d2ec71d046a7819680fcf138697164f0}
+      \strng{fullhashraw}{d2ec71d046a7819680fcf138697164f0}
+      \strng{bibnamehash}{d2ec71d046a7819680fcf138697164f0}
+      \strng{authorbibnamehash}{d2ec71d046a7819680fcf138697164f0}
+      \strng{authornamehash}{4dc2c7e5cf26656fef590eadcfd8465c}
+      \strng{authorfullhash}{d2ec71d046a7819680fcf138697164f0}
+      \strng{authorfullhashraw}{d2ec71d046a7819680fcf138697164f0}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{20th USENIX Symposium on Networked Systems Design and Implementation (NSDI 23)}
+      \field{title}{Shockwave: Fair and Efficient Cluster Scheduling for Dynamic Adaptation in Machine Learning}
+      \field{year}{2023}
+      \true{nocite}
+      \field{pages}{703\bibrangedash 723}
+      \range{pages}{21}
+    \endentry
+    \entry{rajasekaran2024cassini}{inproceedings}{}{}
+      \name{author}{3}{}{%
+        {{hash=fad5ba3538f08649a0634775ed3cfa71}{%
+           family={Rajasekaran},
+           familyi={R\bibinitperiod},
+           given={Sudarsanan},
+           giveni={S\bibinitperiod}}}%
+        {{hash=ebb108cd9e0bc2b8448808054c85d239}{%
+           family={Ghobadi},
+           familyi={G\bibinitperiod},
+           given={Manya},
+           giveni={M\bibinitperiod}}}%
+        {{hash=e0f924d882649acf998332fe435297e7}{%
+           family={Akella},
+           familyi={A\bibinitperiod},
+           given={Aditya},
+           giveni={A\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {USENIX Association}%
+      }
+      \strng{namehash}{bbbf59d42ed88b06635591b83b53bec0}
+      \strng{fullhash}{780cf4d77cf1732b46cc10bd31f90421}
+      \strng{fullhashraw}{780cf4d77cf1732b46cc10bd31f90421}
+      \strng{bibnamehash}{780cf4d77cf1732b46cc10bd31f90421}
+      \strng{authorbibnamehash}{780cf4d77cf1732b46cc10bd31f90421}
+      \strng{authornamehash}{bbbf59d42ed88b06635591b83b53bec0}
+      \strng{authorfullhash}{780cf4d77cf1732b46cc10bd31f90421}
+      \strng{authorfullhashraw}{780cf4d77cf1732b46cc10bd31f90421}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{21st USENIX Symposium on Networked Systems Design and Implementation (NSDI 24)}
+      \field{title}{{CASSINI}: Network-Aware Job Scheduling in Machine Learning Clusters}
+      \field{year}{2024}
+      \true{nocite}
+      \field{pages}{1403\bibrangedash 1420}
+      \range{pages}{18}
+    \endentry
+    \entry{zhang2025rubick}{inproceedings}{}{}
+      \name{author}{8}{}{%
+        {{hash=1d66e4e6094be59269047934a8327e5f}{%
+           family={Zhang},
+           familyi={Z\bibinitperiod},
+           given={Xinyi},
+           giveni={X\bibinitperiod}}}%
+        {{hash=6e5f863276b6d1e9c77c19d42e9cc1ef}{%
+           family={Zhao},
+           familyi={Z\bibinitperiod},
+           given={Hanyu},
+           giveni={H\bibinitperiod}}}%
+        {{hash=d7fd4580156e990d082ccd1e17c106b6}{%
+           family={Xiao},
+           familyi={X\bibinitperiod},
+           given={Wencong},
+           giveni={W\bibinitperiod}}}%
+        {{hash=bf2ccd6314ebac8d6fa91c3be7ab5269}{%
+           family={Jia},
+           familyi={J\bibinitperiod},
+           given={Xianyan},
+           giveni={X\bibinitperiod}}}%
+        {{hash=d5ffa18724632f01eea9ec8c2824ff66}{%
+           family={Xu},
+           familyi={X\bibinitperiod},
+           given={Fei},
+           giveni={F\bibinitperiod}}}%
+        {{hash=78be8ea0cb80e4e1b59bf06100942e90}{%
+           family={Li},
+           familyi={L\bibinitperiod},
+           given={Yong},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=4a5c69e514f00961901616047782d0d6}{%
+           family={Lin},
+           familyi={L\bibinitperiod},
+           given={Wei},
+           giveni={W\bibinitperiod}}}%
+        {{hash=7e7cba3ca78f8e148f126c845abfae96}{%
+           family={Liu},
+           familyi={L\bibinitperiod},
+           given={Fangming},
+           giveni={F\bibinitperiod}}}%
+      }
+      \strng{namehash}{c4733b618bd20d7a5ad925ff526dd5a2}
+      \strng{fullhash}{8dee6baf67483e6a773447ec153b9be8}
+      \strng{fullhashraw}{8dee6baf67483e6a773447ec153b9be8}
+      \strng{bibnamehash}{c4733b618bd20d7a5ad925ff526dd5a2}
+      \strng{authorbibnamehash}{c4733b618bd20d7a5ad925ff526dd5a2}
+      \strng{authornamehash}{c4733b618bd20d7a5ad925ff526dd5a2}
+      \strng{authorfullhash}{8dee6baf67483e6a773447ec153b9be8}
+      \strng{authorfullhashraw}{8dee6baf67483e6a773447ec153b9be8}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Proceedings of Machine Learning and Systems}
+      \field{title}{Rubick: Exploiting Job Reconfigurability for Deep Learning Cluster Scheduling}
+      \field{volume}{7}
+      \field{year}{2025}
+      \true{nocite}
+    \endentry
+    \entry{dong2026drlmls}{article}{}{}
+      \name{author}{4}{}{%
+        {{hash=05734afdb20180ed4dbeb4aa0ce2a338}{%
+           family={Dong},
+           familyi={D\bibinitperiod},
+           given={S.},
+           giveni={S\bibinitperiod}}}%
+        {{hash=430fa2cfc09fd89f9ee927b59defd610}{%
+           family={Zheng},
+           familyi={Z\bibinitperiod},
+           given={B.},
+           giveni={B\bibinitperiod}}}%
+        {{hash=31d5ff7d00790cb06a91b4ffc06c19c2}{%
+           family={Pan},
+           familyi={P\bibinitperiod},
+           given={L.},
+           giveni={L\bibinitperiod}}}%
+        {{hash=92faacc6874983183ce7fb86e39f31ec}{%
+           family={Liu},
+           familyi={L\bibinitperiod},
+           given={S.},
+           giveni={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{0b4451740a5d9e13655655623e76d34c}
+      \strng{fullhash}{fab047e2a3823a80ba6981b0ff27bf58}
+      \strng{fullhashraw}{fab047e2a3823a80ba6981b0ff27bf58}
+      \strng{bibnamehash}{fab047e2a3823a80ba6981b0ff27bf58}
+      \strng{authorbibnamehash}{fab047e2a3823a80ba6981b0ff27bf58}
+      \strng{authornamehash}{0b4451740a5d9e13655655623e76d34c}
+      \strng{authorfullhash}{fab047e2a3823a80ba6981b0ff27bf58}
+      \strng{authorfullhashraw}{fab047e2a3823a80ba6981b0ff27bf58}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Future Generation Computer Systems}
+      \field{title}{A Reinforcement Learning-Based Approach for Scheduling {ML} Training Tasks in Heterogeneous {Kubernetes} Clusters}
+      \field{volume}{182}
+      \field{year}{2026}
+      \true{nocite}
+      \field{pages}{108459}
+      \range{pages}{1}
+      \verb{doi}
+      \verb 10.1016/j.future.2026.108459
+      \endverb
+    \endentry
+    \entry{santos2026sakkara}{article}{}{}
+      \name{author}{7}{}{%
+        {{hash=9fa87dc9902443bf7f48813f39a493f2}{%
+           family={Santos},
+           familyi={S\bibinitperiod},
+           given={José},
+           giveni={J\bibinitperiod}}}%
+        {{hash=907a0afc88c132cc44ebd37534a7d102}{%
+           family={Tantawi},
+           familyi={T\bibinitperiod},
+           given={Asser},
+           giveni={A\bibinitperiod}}}%
+        {{hash=41b5e6a8908d43f15489e84d2d39662f}{%
+           family={Maniotis},
+           familyi={M\bibinitperiod},
+           given={Pavlos},
+           giveni={P\bibinitperiod}}}%
+        {{hash=147b8560865739e558b0631402b38ee6}{%
+           family={Wang},
+           familyi={W\bibinitperiod},
+           given={Chen},
+           giveni={C\bibinitperiod}}}%
+        {{hash=3e72e639ec81e59233d387f797af87f6}{%
+           family={Tardieu},
+           familyi={T\bibinitperiod},
+           given={Olivier},
+           giveni={O\bibinitperiod}}}%
+        {{hash=42115a1a768de5b4fb8e99ee0a00b142}{%
+           family={Wauters},
+           familyi={W\bibinitperiod},
+           given={Tim},
+           giveni={T\bibinitperiod}}}%
+        {{hash=28fcb44ef6809813ddca1d3f51f1f6ba}{%
+           family={Turck},
+           familyi={T\bibinitperiod},
+           given={Filip\bibnamedelima De},
+           giveni={F\bibinitperiod\bibinitdelim D\bibinitperiod}}}%
+      }
+      \strng{namehash}{352055559f274af7d7852048c0f3d4e7}
+      \strng{fullhash}{b2527094493ee959770474671bcda790}
+      \strng{fullhashraw}{b2527094493ee959770474671bcda790}
+      \strng{bibnamehash}{352055559f274af7d7852048c0f3d4e7}
+      \strng{authorbibnamehash}{352055559f274af7d7852048c0f3d4e7}
+      \strng{authornamehash}{352055559f274af7d7852048c0f3d4e7}
+      \strng{authorfullhash}{b2527094493ee959770474671bcda790}
+      \strng{authorfullhashraw}{b2527094493ee959770474671bcda790}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{IEEE Transactions on Network and Service Management}
+      \field{title}{Sakkara: Intelligent Topology-Aware Scheduling for {Kubernetes} in the Age of {AI}}
+      \field{volume}{23}
+      \field{year}{2026}
+      \true{nocite}
+      \field{pages}{5437\bibrangedash 5451}
+      \range{pages}{15}
+      \verb{doi}
+      \verb 10.1109/TNSM.2026.3703831
+      \endverb
+    \endentry
+    \entry{kueue2026}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=72af25aa3e74689d6d5d2be0b2cb33a7}{%
+           family={{Kubernetes SIG Scheduling}},
+           familyi={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \strng{fullhash}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \strng{fullhashraw}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \strng{bibnamehash}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \strng{authorbibnamehash}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \strng{authornamehash}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \strng{authorfullhash}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \strng{authorfullhashraw}{72af25aa3e74689d6d5d2be0b2cb33a7}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Kueue Documentation}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{Kueue Overview}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://kueue.sigs.k8s.io/docs/overview/
+      \endverb
+      \verb{url}
+      \verb https://kueue.sigs.k8s.io/docs/overview/
+      \endverb
+    \endentry
+    \entry{volcano2026}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=21e931fe9edbcf97699a9f6713146cd0}{%
+           family={{Volcano Community}},
+           familyi={V\bibinitperiod}}}%
+      }
+      \strng{namehash}{21e931fe9edbcf97699a9f6713146cd0}
+      \strng{fullhash}{21e931fe9edbcf97699a9f6713146cd0}
+      \strng{fullhashraw}{21e931fe9edbcf97699a9f6713146cd0}
+      \strng{bibnamehash}{21e931fe9edbcf97699a9f6713146cd0}
+      \strng{authorbibnamehash}{21e931fe9edbcf97699a9f6713146cd0}
+      \strng{authornamehash}{21e931fe9edbcf97699a9f6713146cd0}
+      \strng{authorfullhash}{21e931fe9edbcf97699a9f6713146cd0}
+      \strng{authorfullhashraw}{21e931fe9edbcf97699a9f6713146cd0}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{Volcano Documentation}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{Unified Scheduling}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://volcano.sh/docs/keyfeatures/unifiedscheduling/
+      \endverb
+      \verb{url}
+      \verb https://volcano.sh/docs/keyfeatures/unifiedscheduling/
+      \endverb
+    \endentry
+    \entry{kai2026}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=a2fe9051fe051f819bd739ef3e340377}{%
+           family={{NVIDIA}},
+           familyi={N\bibinitperiod}}}%
+      }
+      \strng{namehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{fullhash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{fullhashraw}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{bibnamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authorbibnamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authornamehash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authorfullhash}{a2fe9051fe051f819bd739ef3e340377}
+      \strng{authorfullhashraw}{a2fe9051fe051f819bd739ef3e340377}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{GitHub repository}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{{KAI} Scheduler}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://github.com/kai-scheduler/KAI-Scheduler
+      \endverb
+      \verb{url}
+      \verb https://github.com/kai-scheduler/KAI-Scheduler
+      \endverb
+    \endentry
+    \entry{harris2020numpy}{article}{}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{3}{}{%
+        {{hash=db2b4761cc46be347b418e68660c9554}{%
+           family={Harris},
+           familyi={H\bibinitperiod},
+           given={Charles\bibnamedelima R.},
+           giveni={C\bibinitperiod\bibinitdelim R\bibinitperiod}}}%
+        {{hash=b053969d2c6a9ec8689980fb6463cd56}{%
+           family={Millman},
+           familyi={M\bibinitperiod},
+           given={K.\bibnamedelimi Jarrod},
+           giveni={K\bibinitperiod\bibinitdelim J\bibinitperiod}}}%
+        {{hash=9a5a65a789013a8d1e8035ec28df9b6e}{%
+           family={Walt},
+           familyi={W\bibinitperiod},
+           given={Stéfan\bibnamedelima J.},
+           giveni={S\bibinitperiod\bibinitdelim J\bibinitperiod},
+           prefix={van\bibnamedelima der},
+           prefixi={v\bibinitperiod\bibinitdelim d\bibinitperiod}}}%
+      }
+      \strng{namehash}{754b3dec5e203c19b9a5798bbb902222}
+      \strng{fullhash}{6689ecc3c9e295b778f29b8693fbf88e}
+      \strng{fullhashraw}{6689ecc3c9e295b778f29b8693fbf88e}
+      \strng{bibnamehash}{6689ecc3c9e295b778f29b8693fbf88e}
+      \strng{authorbibnamehash}{6689ecc3c9e295b778f29b8693fbf88e}
+      \strng{authornamehash}{754b3dec5e203c19b9a5798bbb902222}
+      \strng{authorfullhash}{6689ecc3c9e295b778f29b8693fbf88e}
+      \strng{authorfullhashraw}{6689ecc3c9e295b778f29b8693fbf88e}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Nature}
+      \field{title}{Array Programming with {NumPy}}
+      \field{volume}{585}
+      \field{year}{2020}
+      \true{nocite}
+      \field{pages}{357\bibrangedash 362}
+      \range{pages}{6}
+      \verb{doi}
+      \verb 10.1038/s41586-020-2649-2
+      \endverb
+    \endentry
+    \entry{k3s2026}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=9864b4dbaa4b86707fc3fd31dc6b1f40}{%
+           family={{K3s Authors}},
+           familyi={K\bibinitperiod}}}%
+      }
+      \strng{namehash}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \strng{fullhash}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \strng{fullhashraw}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \strng{bibnamehash}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \strng{authorbibnamehash}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \strng{authornamehash}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \strng{authorfullhash}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \strng{authorfullhashraw}{9864b4dbaa4b86707fc3fd31dc6b1f40}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{K3s Documentation}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{{K3s}: Lightweight {Kubernetes}}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://docs.k3s.io/
+      \endverb
+      \verb{url}
+      \verb https://docs.k3s.io/
+      \endverb
+    \endentry
+    \entry{kubeml2026artifact}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=df1d9a81da414f8423ce62f1921e4070}{%
+           family={Movahed},
+           familyi={M\bibinitperiod},
+           given={Amir\bibnamedelima Mirzaei},
+           giveni={A\bibinitperiod\bibinitdelim M\bibinitperiod}}}%
+      }
+      \strng{namehash}{df1d9a81da414f8423ce62f1921e4070}
+      \strng{fullhash}{df1d9a81da414f8423ce62f1921e4070}
+      \strng{fullhashraw}{df1d9a81da414f8423ce62f1921e4070}
+      \strng{bibnamehash}{df1d9a81da414f8423ce62f1921e4070}
+      \strng{authorbibnamehash}{df1d9a81da414f8423ce62f1921e4070}
+      \strng{authornamehash}{df1d9a81da414f8423ce62f1921e4070}
+      \strng{authorfullhash}{df1d9a81da414f8423ce62f1921e4070}
+      \strng{authorfullhashraw}{df1d9a81da414f8423ce62f1921e4070}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{howpublished}{GitHub repository}
+      \field{note}{Accessed: Aug. 10, 2026}
+      \field{title}{{KubeML-Aware}: Source Code and Experiment Artifacts}
+      \field{year}{2026}
+      \true{nocite}
+      \verb{urlraw}
+      \verb https://github.com/AmirMirzaeiMovahed/KubeML-Aware
+      \endverb
+      \verb{url}
+      \verb https://github.com/AmirMirzaeiMovahed/KubeML-Aware
+      \endverb
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

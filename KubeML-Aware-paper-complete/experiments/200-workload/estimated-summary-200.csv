@@ -1,0 +1,6 @@
+﻿policy,average_jct_seconds,median_jct_seconds,p95_jct_seconds,maximum_jct_seconds,makespan_seconds,average_ilt_seconds,average_jct_improvement_vs_default_percent,makespan_improvement_vs_default_percent,evidence_status
+kubernetes-default,990.762673,1081.874454,1296.577017,1304.510861,1304.510861,0.855187,0.0,0.0,synthetic-estimate-not-executed-on-kubernetes
+six-feature,764.897166,920.490269,1169.745283,1177.271101,1177.271101,0.854758,22.797135,9.753829,synthetic-estimate-not-executed-on-kubernetes
+kubeml-fastpath-tail,764.897918,920.490269,1169.889275,1177.263434,1177.263434,0.854758,22.797059,9.754417,synthetic-estimate-not-executed-on-kubernetes
+reversed-ablation,1235.540647,1299.734965,1443.416586,1447.093213,1447.093213,0.854758,-24.706015,-10.929947,synthetic-estimate-not-executed-on-kubernetes
+duration-only,737.874289,909.936215,1153.172397,1160.806171,1160.806171,0.854758,25.524618,11.015983,synthetic-estimate-not-executed-on-kubernetes

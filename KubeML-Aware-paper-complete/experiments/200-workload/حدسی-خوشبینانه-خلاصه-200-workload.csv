@@ -1,0 +1,5 @@
+﻿policy,average_jct_seconds,median_jct_seconds,p95_jct_seconds,maximum_jct_seconds,makespan_seconds,average_ilt_seconds,average_jct_improvement_vs_default_percent,p95_jct_improvement_vs_default_percent,makespan_improvement_vs_default_percent,evidence_status
+kubernetes-default,990.762673,1081.874454,1296.577017,1304.510861,1304.510861,0.855187,0.0,0.0,0.0,optimistic-synthetic-what-if-not-measured
+duration-only,737.874289,909.936215,1153.172397,1160.806171,1160.806171,0.854758,25.524618,11.060247,11.015983,optimistic-synthetic-what-if-not-measured
+kubeml-optimistic,693.601832,840.560156,1118.632376,1137.590048,1137.590048,0.837663,29.993141,13.724186,12.795663,optimistic-synthetic-what-if-not-measured
+reversed-ablation,1235.540647,1299.734965,1443.416586,1447.093213,1447.093213,0.854758,-24.706015,-11.325171,-10.929947,optimistic-synthetic-what-if-not-measured

@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "kind": "optimistic-synthetic-what-if",
+  "evidence_status": "not-executed-on-kubernetes",
+  "workloads": 200,
+  "seed": 20260810,
+  "profile": "heavy-training-proxy",
+  "assumed_incremental_gain_vs_duration_only": {
+    "average_jct_percent": 6.0,
+    "p95_jct_percent": 3.0,
+    "makespan_percent": 2.0
+  },
+  "projected_improvement_vs_kubernetes_default": {
+    "average_jct_percent": 30.0,
+    "p95_jct_percent": 13.7,
+    "makespan_percent": 12.8
+  },
+  "claim_policy": "Projection only; must not be described as an executed Kubernetes result."
+}

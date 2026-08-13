@@ -1,0 +1,4 @@
+﻿policy,average_jct_seconds,p95_jct_seconds,makespan_seconds,average_jct_improvement_vs_default_percent,makespan_improvement_vs_default_percent,evidence_status
+Kubernetes default,990.762673,1296.577017,1304.510861,0.0,0.0,optimistic-synthetic-what-if-not-measured
+Duration-only,737.874289,1153.172397,1160.806171,25.524618,11.015983,optimistic-synthetic-what-if-not-measured
+KubeML optimistic what-if,693.601832,1118.577225,1137.590048,29.993141,12.795663,optimistic-synthetic-what-if-not-measured
